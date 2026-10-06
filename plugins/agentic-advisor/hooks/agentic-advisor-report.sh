@@ -188,6 +188,7 @@ parse_tokens() {
     parsed="$(python3 - "$transcript" <<'PY' 2>/dev/null || echo '{}'
 import sys, json, re, datetime
 def ep(t): return datetime.datetime.fromisoformat(t.replace("Z", "+00:00")).timestamp()
+DOC_EXT = {"md", "markdown", "mdx", "txt", "rst", "adoc", "log"}
 skill = verdict = first_edit = None
 turns = []  # (ts_epoch, output_tokens) for assistant turns
 for line in open(sys.argv[1]):
@@ -209,7 +210,9 @@ for line in open(sys.argv[1]):
         if typ == "tool_use" and x.get("name") == "Skill" \
            and "agentic-advisor" in str((x.get("input") or {}).get("skill", "")):
             if skill is None: skill = te
-        elif typ == "tool_use" and x.get("name") in ("Edit", "Write") and first_edit is None:
+        # Same docs/text skip as the trigger: a docs-only edit is not a code session.
+        elif typ == "tool_use" and x.get("name") in ("Edit", "Write") and first_edit is None \
+             and str((x.get("input") or {}).get("file_path", "")).rsplit(".", 1)[-1].lower() not in DOC_EXT:
             first_edit = te
         # verdict must be ASSISTANT-authored text AFTER the Skill call — not the
         # SKILL.md examples that load on invocation (they also match the pattern).

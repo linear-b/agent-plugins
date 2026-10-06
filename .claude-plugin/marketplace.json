@@ -6,7 +6,7 @@
   },
   "owner": {
     "name": "LinearB",
-    "email": "dev@linearb.io"
+    "email": "support@linearb.io"
   },
   "plugins": [
     {
@@ -15,7 +15,7 @@
       "version": "1.0.0",
       "author": {
         "name": "LinearB",
-        "email": "dev@linearb.io"
+        "email": "support@linearb.io"
       },
       "source": "./plugins/agentic-advisor",
       "category": "engineering"

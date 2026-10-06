@@ -34,10 +34,10 @@ Two checks that prevent wasted work — do them before any LinearB call:
   cat "$f" 2>/dev/null   # read BEFORE any LinearB call
   ```
   - **On a hit** (file exists AND `computed_at` is within the last 24h — or the file's mtime is <24h old): **skip ALL LinearB API calls** (repo list, measurements, incidents/search) and reuse `repo_effort`/`repo_evidence` **as the repo-health axis only**. You MUST still grade **task-complexity and change-area (files) fresh for the current task**, then combine — the cache replaces the phase-1 *data*, NOT the final verdict. Note it — **keep the standard `… <EFFORT> effort (…)` shape** (with the literal word `effort`) so the reporter still captures the decision: `LinearB: <repo> — <EFFORT> effort (repo-health cached <N>h ago; task + files fresh)`.
-  - **On a miss/stale:** compute the repo-health verdict fresh, then **write the cache atomically** (temp file then `mv` — atomic on the same filesystem, so concurrent sessions can't read a half-written file):
+  - **On a miss/stale:** compute the repo-health verdict fresh, then **write the cache atomically** (a per-process temp file then `mv` — atomic on the same filesystem, and the `$$` suffix means two concurrent sessions never share a temp file):
     ```text
     mkdir -p "${TMPDIR:-/tmp}/agentic-advisor/verdicts"
-    printf '%s' '{"repo":"<name>","repo_id":<id>,"repo_effort":"<LOW|MEDIUM|HIGH>","repo_evidence":"<real figures>","computed_at":"<ISO-8601 UTC>"}' > "$f.tmp" && mv -f "$f.tmp" "$f"
+    printf '%s' '{"repo":"<name>","repo_id":<id>,"repo_effort":"<LOW|MEDIUM|HIGH>","repo_evidence":"<real figures>","computed_at":"<ISO-8601 UTC>"}' > "$f.$$.tmp" && mv -f "$f.$$.tmp" "$f"
     ```
   - **Recompute (ignore cache) if:** it's older than 24h, you just merged/deployed to this repo, or a serious incident may have landed.
   - **⚠️ The cache stores ONLY the repo-health verdict (phase 1: rework / incidents / unreviewed merges) — daily-stable and task-independent. It does NOT store the final combined effort.** Both **change-area (file fix/revert + ownership)** and **task-complexity** are per-task and are **NEVER cached** — recompute them every task and combine `max(cached repo-health, fresh task-complexity, fresh change-area)`. So a **different task on the same repo within 24h** reuses only the cheap repo-health part and still re-grades the task-specific axes → correct effort for the new task. A cached-calm repo can still surface a HIGH task or file finding.
