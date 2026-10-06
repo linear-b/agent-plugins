@@ -1,0 +1,12 @@
+{
+  "name": "linearb-ai",
+  "metadata": {
+    "description": "LinearB plugins for AI coding agents: engineering context from LinearB, right inside your agent.",
+    "version": "1.0.0"
+  },
+  "owner": {
+    "name": "LinearB",
+    "email": "dev@linearb.io"
+  },
+  "plugins": []
+}
