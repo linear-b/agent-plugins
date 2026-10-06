@@ -15,7 +15,7 @@ Then restart Claude Code so the plugin's hooks load.
 
 | Plugin | What it does |
 | --- | --- |
-| _coming soon_ | |
+| [`agentic-advisor`](plugins/agentic-advisor) | Before writing code, grades how fragile the target is (LinearB rework, incidents, unreviewed merges + local git history) and holds the agent to a matching LOW / MEDIUM / HIGH effort level. |
 
 ## License
 

@@ -8,5 +8,17 @@
     "name": "LinearB",
     "email": "dev@linearb.io"
   },
-  "plugins": []
+  "plugins": [
+    {
+      "name": "agentic-advisor",
+      "description": "Before writing code, grades how fragile the target is from LinearB health signals + local git history and holds the agent to a matching effort level (LOW/MEDIUM/HIGH) — lean on calm repos, defensive on fragile ones.",
+      "version": "1.0.0",
+      "author": {
+        "name": "LinearB",
+        "email": "dev@linearb.io"
+      },
+      "source": "./plugins/agentic-advisor",
+      "category": "engineering"
+    }
+  ]
 }
