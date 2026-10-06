@@ -11,7 +11,7 @@ At the start of a code task, a bundled hook auto-invokes the `agentic-advisor` s
 /plugin install agentic-advisor@linearb-ai
 ```
 
-Then export `LINEARB_API_TOKEN` (see [Setup](#usage-telemetry-optional)) and restart Claude Code — hooks load at startup.
+Then export `LINEARB_API_TOKEN` (see [Setup](#usage-telemetry-on-by-default)) and restart Claude Code — hooks load at startup.
 
 ## What you'll see
 
@@ -24,16 +24,16 @@ The agent prints a one-line verdict before writing code, e.g.:
 ## How it decides
 
 - **Effort bands** match LinearB's own rework benchmark: ELITE <3% / STRONG 3–6% → **LOW**; FAIR 6–7% → **MEDIUM**; NEEDS FOCUS >7% → **HIGH**. Effort = the highest-firing signal (rework, unreviewed merges, or a recent serious incident).
-- **Phase 2 (file-grained):** on non-trivial changes to a fragile/sensitive area, it also checks local git fix/revert density on the exact files, to target where to concentrate care.
-- **Stays lean:** trivial edits (comments, docs, formatting, pure renames) skip everything and cap at LOW; the verdict is cached once per repo per session.
+- **Phase 2 (file-grained):** on non-trivial changes to a fragile/sensitive area, it also checks local git history on the exact files — how much existing code was rewritten over the last 90 days (the main signal) and who owns it — to target where to concentrate care. Commit messages saying "fix"/"revert" count only as a weak hint.
+- **Stays lean:** trivial edits (comments, docs, formatting, pure renames) skip everything and cap at LOW; the repo-health part of the verdict is cached per repo for 24 hours, while the task and file checks are re-run for every task.
 
 ## Triggers
 
 Auto-fires (once per repo, per session) on a Jira ticket in the prompt, code-task keywords (fix / implement / refactor…), or the first source-file edit in a git repo. Skips questions, doc/text edits, and files outside a git repo.
 
-## Usage telemetry (optional)
+## Usage telemetry (on by default)
 
-Bundled hooks can report each effort decision to LinearB's reported-metrics API as the custom metric **`agentic_advisor.effort_decision`** (`source: claude-code`), so adoption is visible in the platform (usage per developer / per repo / by effort level). It's **opt-in and fire-and-forget**: with no token set it does nothing; failures never block or slow your turn.
+Bundled hooks can report each effort decision to LinearB's reported-metrics API as the custom metric **`agentic_advisor.effort_decision`** (`source: claude-code`), so adoption is visible in the platform (usage per developer / per repo / by effort level). **It's on by default** whenever `LINEARB_API_TOKEN` is set — the same token the skill needs for its reads. Turn it off with `export LINEARB_TELEMETRY=0`. It's fire-and-forget: failures never block or slow your turn.
 
 **What it reports** — two kinds of event, distinguished by `tags.phase`:
 
@@ -68,7 +68,7 @@ export LINEARB_API_TOKEN="<your LinearB API token>"
 # export LINEARB_API_URL="https://<your-linearb-api-host>"
 ```
 
-Then **launch Claude Code from a shell that has it exported** (hooks and the skill read the env at launch — a token added to an already-running session isn't seen until you restart; if you rely on `~/.zshrc`, start Claude from an interactive shell). The token is only ever passed to `curl` as an env reference; it is never printed or logged. **Without a token the skill degrades to MEDIUM effort** (it never blocks).
+Then **launch Claude Code from a shell that has it exported** (hooks and the skill read the env at launch — a token added to an already-running session isn't seen until you restart; if you rely on `~/.zshrc`, start Claude from an interactive shell). The token is handed to `curl` on stdin, never as a command-line argument, and it is never printed or logged. **Without a token the skill degrades to MEDIUM effort** (it never blocks).
 
 ## Requirements
 
@@ -78,5 +78,5 @@ Then **launch Claude Code from a shell that has it exported** (hooks and the ski
 
 ## Opting out
 
-- **Telemetry:** the reporter is fire-and-forget and no-ops on any failure; to stop reporting entirely, remove the reporter hook. (The same token powers reads, so unsetting it also drops signals → MEDIUM.)
+- **Telemetry:** `export LINEARB_TELEMETRY=0` (also accepts `false` / `off` / `no`) and relaunch Claude Code. The skill keeps working with your token; only reporting stops.
 - **Everything:** disable the plugin (`/plugin`) to stop the auto-trigger. The hooks only inject a suggestion to run the skill and (optionally) report a metric — they never block your work.

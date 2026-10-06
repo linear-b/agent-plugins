@@ -11,11 +11,11 @@ Run this at the start of a code task to load the repo's current health signals, 
 
 ## Access (read first)
 
-All signals come from LinearB's **public API** over `curl` — no MCP connector needed. The base URL defaults to `https://public-api.linearb.io`; on-prem or regional deployments override it with `LINEARB_API_URL`. Authentication is a single org-scoped token in the `LINEARB_API_TOKEN` environment variable (created in the LinearB UI: **Settings → API Tokens → Create API Token**). Set up shared values once (`Content-Type` is required even on GET):
+All signals come from LinearB's **public API** over `curl` — no MCP connector needed. The base URL defaults to `https://public-api.linearb.io`; on-prem or regional deployments override it with `LINEARB_API_URL`. Authentication is a single org-scoped token in the `LINEARB_API_TOKEN` environment variable (created in the LinearB UI: **Settings → API Tokens → Create API Token**). Set up shared values once (`Content-Type` is required even on GET). The token is fed to `curl` on stdin (`-H @-` plus `<<<"x-api-key: …"` on each call), never as an argument, so it can't show up in process listings:
 
 ```bash
 LB="${LINEARB_API_URL:-https://public-api.linearb.io}"; LB="${LB%/}"
-AUTH=(-H "x-api-key: ${LINEARB_API_TOKEN}" -H "Content-Type: application/json")
+AUTH=(-H @- -H "Content-Type: application/json")
 ```
 
 **Token gate:** if `LINEARB_API_TOKEN` is empty, do **not** call — grade **MEDIUM** (signals unavailable), print the verdict, and continue. Never block the task. The same token authenticates both these reads and the optional reporter hook. On any timeout or non-2xx, treat that one signal as unavailable rather than failing the task.
@@ -56,7 +56,7 @@ case "$raw" in
 esac
 case "$url" in *.git) : ;; *) url="${url%/}.git" ;; esac
 
-curl -sS -m 20 "${AUTH[@]}" "$LB/api/v1/repositories" \
+curl -sS -m 20 "${AUTH[@]}" <<<"x-api-key: ${LINEARB_API_TOKEN}" "$LB/api/v1/repositories" \
   | jq -r --arg u "$url" --arg n "<repo-name>" '
       ( map(select((.http_url // "" | ascii_downcase) == ($u | ascii_downcase))) | .[0] )
       // ( map(select(.name == $n)) | .[0] )
@@ -76,7 +76,7 @@ before="$(date -u +%F)"; after="$(date -u -v-30d +%F 2>/dev/null || date -u -d '
 # `repository_ids` below is REQUIRED and already solves the pagination cap — it fetches THIS
 # repo directly. Do NOT drop it, and do NOT "rediscover" the cap with limit/page_size/offset;
 # that path is a known dead end (querystring `limit` is ignored). Just send this payload as-is.
-curl -sS -m 25 "${AUTH[@]}" -X POST "$LB/api/v2/measurements" -d '{
+curl -sS -m 25 "${AUTH[@]}" <<<"x-api-key: ${LINEARB_API_TOKEN}" -X POST "$LB/api/v2/measurements" -d '{
   "group_by": "repository",
   "repository_ids": [<repo_id>],
   "requested_metrics": [
@@ -95,7 +95,7 @@ curl -sS -m 25 "${AUTH[@]}" -X POST "$LB/api/v2/measurements" -d '{
 **Incidents — org-level (`POST /api/v1/incidents/search`).** Incidents are org-scoped and usually untagged to a repo (PM/Jira-derived ones carry no repository), so a repo-filtered search typically returns nothing — query org-level and judge relevance from titles:
 
 ```bash
-curl -sS -m 25 "${AUTH[@]}" -X POST "$LB/api/v1/incidents/search" -d '{
+curl -sS -m 25 "${AUTH[@]}" <<<"x-api-key: ${LINEARB_API_TOKEN}" -X POST "$LB/api/v1/incidents/search" -d '{
   "limit": 50, "sort_by": "issued_at", "sort_dir": "desc"
 }' | jq '.items[] | {title, issued_at, ended_at, status}'
 ```
@@ -163,7 +163,7 @@ git log --oneline --since=90.days -i --grep=revert --grep=hotfix --grep=rollback
 git blame -w -M --line-porcelain HEAD -- <file> | grep '^author ' | sed 's/^author //' | sort | uniq -c | sort -rn | head   # top line-owners (by name)
 git log --no-merges --since='52 weeks ago' --format='%an' -- <file> | sort | uniq -c | sort -rn | head                       # recent authors (52wk)
 # my familiarity (me = my git email): my share of current lines, and my commits on it in 52wk
-me="$(git config user.email)"
+me="$(git config user.email)"   # EMPTY -> skip the familiarity probes: no identity is not "unfamiliar"
 git blame -w -M --line-porcelain HEAD -- <file> | awk -v me="<$me>" '/^author-mail /{t++; if($2==me)m++} END{printf "mine=%d total=%d\n", m, t}'
 git log --no-merges --since='52 weeks ago' --format='%ae' -- <file> | grep -Fxc "$me"   # my commits on it in 52wk
 ```
@@ -182,14 +182,14 @@ git log --no-merges --since='52 weeks ago' --format='%ae' -- <file> | grep -Fxc 
 - **Diffusion** = count of distinct recent authors.
 
 How to use it:
-- **Familiarity → the one raiser here (unfamiliar only).** If my share is negligible (~0) **and** I have no 52wk commits on the file, I'm **editing someone else's code** → raise change-area effort **one notch** (LOW→MEDIUM, MEDIUM→HIGH — not an automatic jump to HIGH) and name the owner in the verdict: `not your code — primary owner A (~X% of lines)`. If ownership is instead **diffuse with no dominant owner** and it isn't mine either → same one-notch raise (no expert to lean on). **One-directional:** if it *is* mine (I own a share, or have recent commits), that **never lowers** the grade — it just doesn't raise.
+- **Familiarity → the one raiser here (unfamiliar only).** **Skip it entirely when `me` is empty** (no git identity configured) — a missing identity makes every file look like 0% mine, which is not evidence of unfamiliarity. Otherwise: if my share is negligible (~0) **and** I have no 52wk commits on the file, I'm **editing someone else's code** → raise change-area effort **one notch** (LOW→MEDIUM, MEDIUM→HIGH — not an automatic jump to HIGH) and name the owner in the verdict: `not your code — primary owner A (~X% of lines)`. If ownership is instead **diffuse with no dominant owner** and it isn't mine either → same one-notch raise (no expert to lean on). **One-directional:** if it *is* mine (I own a share, or have recent commits), that **never lowers** the grade — it just doesn't raise.
 - **Concentrated + top owner NOT in the recent-activity list** → the concentrated knowledge isn't being actively maintained *on this file*. Treat as a caution factor **only when paired with fragility** (fix/revert density or repo rework) — on its own it's ambiguous (could just be settled, stable code, exactly like high churn). When it does apply: lean additive, add tests, and ask before a broad refactor.
 - **High diffusion** (many recent hands) → coordination surface → slight caution up.
 - **⚠️ Wording is non-negotiable:** "not recently active *on this file*" is **NOT** "left the company." git (and gitstream) cannot see employment status, and there is no cheap local active-employee source — so **never state or imply that an owner departed**. Report only what git shows: e.g. `owner: A ~90% of lines, not active on this file in 52wk`. Do not name a person as "gone."
 
 (Co-change coupling is still intentionally left out — add only if it proves its keep. This ownership signal mimics gitstream's "code experts" git extraction — `git blame --line-porcelain` for knowledge + `git log --since=52.weeks` for activity — but scores locally with a simple heuristic, and is recency-bounded + framed as above so a lone author who's simply moved on doesn't get mislabeled.)
 
-**Combine:** `effort = max(repo-health effort, change-area effort)` — the conservative choice for a safety gate: the riskier axis wins so a genuinely fragile file can't be washed out by a calm repo. But `max` is **lossy** (LOW-repo+HIGH-file and HIGH-repo+HIGH-file both collapse to HIGH) and the two axes aren't on the same underlying scale, so **always surface which axis drove the verdict** — e.g. `HIGH effort (repo calm — rework 0.4% — but target file has 9 fix/revert commits in 90d)`.
+**Combine:** `effort = max(repo-health effort, change-area effort, task-complexity effort)` — all three axes, always — the conservative choice for a safety gate: the riskier axis wins so a genuinely fragile file can't be washed out by a calm repo. But `max` is **lossy** (LOW-repo+HIGH-file and HIGH-repo+HIGH-file both collapse to HIGH) and the two axes aren't on the same underlying scale, so **always surface which axis drove the verdict** — e.g. `HIGH effort (repo calm — rework 0.4% — but target file has 9 fix/revert commits in 90d)`.
 
 **When the repo is already HIGH, still run and report phase 2.** It can't raise the level, but the file-level finding is *targeting context* — it tells you which specific files in a fragile repo are the fix/revert hotspots, so you concentrate the defensive guards and tests there instead of spreading effort evenly. The severity says "be careful"; the file data says "be careful *here*."
 

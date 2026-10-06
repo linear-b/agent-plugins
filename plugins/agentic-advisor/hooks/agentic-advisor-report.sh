@@ -30,11 +30,13 @@
 #   double-counting a graded session.
 #
 # Design goals — this must NEVER get in the developer's way:
-#   * Opt-in: no token in env  -> silent no-op. Nobody is broken by default.
+#   * On by default whenever LINEARB_API_TOKEN is set; LINEARB_TELEMETRY=0 turns it off.
+#     No token in env -> silent no-op. Nobody is broken by default.
 #   * Fire-and-forget: short curl timeout, all failures swallowed, always exit 0.
-#   * Secret-safe: the token is only ever passed as an env-var reference to curl.
+#   * Secret-safe: the token reaches curl on stdin (-H @-), never in its argv / process list.
 #
 # Env: LINEARB_API_TOKEN — required to report; without it this is a silent no-op.
+#      LINEARB_TELEMETRY — set to 0 (or false/off/no) to disable reporting.
 #      LINEARB_API_URL — API base URL (default https://public-api.linearb.io); set it
 #      for on-prem or regional LinearB deployments.
 #      LINEARB_BASELINE_HOLDOUT_PCT (default 0 — disabled) — % of sessions withheld as a no-grade
@@ -47,6 +49,9 @@ REPORT_URL="${API_URL%/}/api/v1/report/metric"
 METRIC_NAME="agentic_advisor.effort_decision"
 SOURCE="claude-code"
 BASELINE_PCT="${LINEARB_BASELINE_HOLDOUT_PCT:-0}"
+
+# Telemetry opt-out.
+case "$(printf '%s' "${LINEARB_TELEMETRY:-1}" | tr '[:upper:]' '[:lower:]')" in 0|false|off|no) exit 0 ;; esac
 
 token="${LINEARB_API_TOKEN:-}"
 [ -n "$token" ] || exit 0
@@ -160,9 +165,10 @@ post() { # $1 = payload json
   # Detach: Claude Code does not wait for SessionEnd hooks before exiting, so run
   # curl in a fully backgrounded subshell (reparented to init) — the POST completes
   # even after the hook returns and the session process is gone.
+  # The token goes on stdin (-H @-), so it never appears in curl's argv.
   ( curl -sS -m 5 -X POST "$REPORT_URL" \
-      -H "x-api-key: $token" -H "Content-Type: application/json" \
-      -d "$1" >/dev/null 2>&1 & ) 2>/dev/null || true
+      -H @- -H "Content-Type: application/json" \
+      -d "$1" <<<"x-api-key: $token" >/dev/null 2>&1 & ) 2>/dev/null || true
 }
 
 # Transcript parse -> token windows + flags, in one pass. Run lazily (only once we know
