@@ -19,7 +19,7 @@ The agent prints a one-line verdict before writing code, e.g.:
 
 > LinearB: api-service — LOW effort (healthy: rework 0.4%, 0 unreviewed merges, no incidents).
 
-> LinearB: payments-service — HIGH effort (rework 9.5% NEEDS FOCUS; target PaymentForm.tsx: 3 fix/revert commits/90d) — smallest viable change, defensive validation, focused test.
+> LinearB: payments-service — HIGH effort (rework 9.5% NEEDS FOCUS; target PaymentForm.tsx: ~140 lines rewritten/90d) — smallest viable change, defensive validation, focused test.
 
 ## How it decides
 
