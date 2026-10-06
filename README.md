@@ -60,14 +60,16 @@ flowchart LR
     B -- yes --> L[LOW]
     B -- no --> C[Repo health<br/>LinearB API]
     C --> D[Task complexity<br/>from the prompt]
-    D --> E[Change area<br/>local git history]
-    E --> F[effort = max of the three]
+    D --> H{Repo MEDIUM/HIGH or<br/>sensitive files?}
+    H -- yes --> E[Change area<br/>local git history]
+    H -- no --> F
+    E --> F[effort = highest axis]
     F --> G[Agent works at that level]
 ```
 
 - **Repo health** comes from LinearB's public API: rework rate (bands match LinearB's own benchmark), unreviewed merges and recent incidents. It's cached per repo for 24 hours.
 - **Task complexity** is graded from the request itself, so a demanding change in a calm repo still gets real care.
-- **Change area** looks at the exact files being touched, using local git history only: how much existing code was rewritten over 90 days, and who owns it.
+- **Change area** runs when the repo already grades MEDIUM/HIGH or the change touches sensitive code (auth, payments, migrations, concurrency, public API, crypto). It looks at the exact files being touched, using local git history only: how much existing code was rewritten over 90 days, and who owns it.
 - **It never blocks.** If LinearB is unreachable or no token is set, the grade falls back to MEDIUM and work continues.
 
 See the [plugin README](plugins/agentic-advisor) for triggers, the full grading rules and configuration.
