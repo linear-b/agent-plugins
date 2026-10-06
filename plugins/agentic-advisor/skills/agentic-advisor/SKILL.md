@@ -16,7 +16,10 @@ All signals come from LinearB's **public API** over `curl` — no MCP connector 
 ```bash
 LB="${LINEARB_API_URL:-https://public-api.linearb.io}"; LB="${LB%/}"
 AUTH=(-H @- -H "Content-Type: application/json")
+set -o pipefail   # with curl -f, a failed request fails the whole pipeline instead of looking like "no rows"
 ```
+
+**A failed call is not an empty result.** With `-f`, any HTTP 4xx/5xx or timeout makes `curl` exit non-zero (e.g. `curl: (22) The requested URL returned error: 401`). Treat that signal as **unavailable** — a failed repositories call is not "repo not found", a failed measurements call is not "dormant" — and **never grade LOW from missing data.** **HTTP 401/403 means the token is invalid or expired:** stop calling, grade **MEDIUM (signals unavailable)**, and tell the user to refresh `LINEARB_API_TOKEN`.
 
 **Token gate:** if `LINEARB_API_TOKEN` is empty, do **not** call — grade **MEDIUM** (signals unavailable), print the verdict, and continue. Never block the task. The same token authenticates both these reads and the optional reporter hook. On any timeout or non-2xx, treat that one signal as unavailable rather than failing the task.
 
@@ -29,14 +32,14 @@ Two checks that prevent wasted work — do them before any LinearB call:
 
   ```text
   # repo-hash = first 12 chars of the repo root's sha1 (shasum on macOS, sha1sum on Linux)
-  root="$(git -C "<cwd>" rev-parse --show-toplevel)"; h="$(printf '%s' "$root" | { shasum 2>/dev/null || sha1sum; } | cut -c1-12)"
-  f="${TMPDIR:-/tmp}/agentic-advisor/verdicts/$h.json"
+  root="$(git -C "<cwd>" rev-parse --show-toplevel)"; h="$(printf '%s' "$root" | { if command -v shasum >/dev/null 2>&1; then shasum; else sha1sum; fi; } | cut -c1-12)"
+  f="${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor/verdicts/$h.json"   # private per-user dir, not shared /tmp
   cat "$f" 2>/dev/null   # read BEFORE any LinearB call
   ```
-  - **On a hit** (file exists AND `computed_at` is within the last 24h — or the file's mtime is <24h old): **skip ALL LinearB API calls** (repo list, measurements, incidents/search) and reuse `repo_effort`/`repo_evidence` **as the repo-health axis only**. You MUST still grade **task-complexity and change-area (files) fresh for the current task**, then combine — the cache replaces the phase-1 *data*, NOT the final verdict. Note it — **keep the standard `… <EFFORT> effort (…)` shape** (with the literal word `effort`) so the reporter still captures the decision: `LinearB: <repo> — <EFFORT> effort (repo-health cached <N>h ago; task + files fresh)`.
+  - **On a hit** (file exists, **is owned by you** — check `[ -O "$f" ]` and ignore it otherwise, since a cache file someone else wrote could fake a LOW grade — AND `computed_at` is within the last 24h — or the file's mtime is <24h old): **skip ALL LinearB API calls** (repo list, measurements, incidents/search) and reuse `repo_effort`/`repo_evidence` **as the repo-health axis only**. You MUST still grade **task-complexity and change-area (files) fresh for the current task**, then combine — the cache replaces the phase-1 *data*, NOT the final verdict. Note it — **keep the standard `… <EFFORT> effort (…)` shape** (with the literal word `effort`) so the reporter still captures the decision: `LinearB: <repo> — <EFFORT> effort (repo-health cached <N>h ago; task + files fresh)`.
   - **On a miss/stale:** compute the repo-health verdict fresh, then **write the cache atomically** (a per-process temp file then `mv` — atomic on the same filesystem, and the `$$` suffix means two concurrent sessions never share a temp file):
     ```text
-    mkdir -p "${TMPDIR:-/tmp}/agentic-advisor/verdicts"
+    (umask 077; mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor/verdicts")
     printf '%s' '{"repo":"<name>","repo_id":<id>,"repo_effort":"<LOW|MEDIUM|HIGH>","repo_evidence":"<real figures>","computed_at":"<ISO-8601 UTC>"}' > "$f.$$.tmp" && mv -f "$f.$$.tmp" "$f"
     ```
   - **Recompute (ignore cache) if:** it's older than 24h, you just merged/deployed to this repo, or a serious incident may have landed.
@@ -56,14 +59,14 @@ case "$raw" in
 esac
 case "$url" in *.git) : ;; *) url="${url%/}.git" ;; esac
 
-curl -sS -m 20 "${AUTH[@]}" <<<"x-api-key: ${LINEARB_API_TOKEN}" "$LB/api/v1/repositories" \
+curl -fsS -m 20 "${AUTH[@]}" <<<"x-api-key: ${LINEARB_API_TOKEN}" "$LB/api/v1/repositories" \
   | jq -r --arg u "$url" --arg n "<repo-name>" '
       ( map(select((.http_url // "" | ascii_downcase) == ($u | ascii_downcase))) | .[0] )
       // ( map(select(.name == $n)) | .[0] )
       | if . == null then empty else {id, name, http_url} end'
 ```
 
-Store `repo_id` (`.id`). **Empty output = not found** → fall back to org-level incidents only; don't block. (This list is not reliably paginated — `limit` works but `offset`/`page` may hang — so on a very large org a repo could be missing from the response; treat a miss as "resolution failed", not "healthy".)
+Store `repo_id` (`.id`). **Empty output from a successful call = not found** → fall back to org-level incidents only; don't block. (This list is not reliably paginated — `limit` works but `offset`/`page` may hang — so on a very large org a repo could be missing from the response; treat a miss as "resolution failed", not "healthy".)
 
 ## Signal Gathering
 
@@ -76,7 +79,7 @@ before="$(date -u +%F)"; after="$(date -u -v-30d +%F 2>/dev/null || date -u -d '
 # `repository_ids` below is REQUIRED and already solves the pagination cap — it fetches THIS
 # repo directly. Do NOT drop it, and do NOT "rediscover" the cap with limit/page_size/offset;
 # that path is a known dead end (querystring `limit` is ignored). Just send this payload as-is.
-curl -sS -m 25 "${AUTH[@]}" <<<"x-api-key: ${LINEARB_API_TOKEN}" -X POST "$LB/api/v2/measurements" -d '{
+curl -fsS -m 25 "${AUTH[@]}" <<<"x-api-key: ${LINEARB_API_TOKEN}" -X POST "$LB/api/v2/measurements" -d '{
   "group_by": "repository",
   "repository_ids": [<repo_id>],
   "requested_metrics": [
@@ -87,7 +90,7 @@ curl -sS -m 25 "${AUTH[@]}" <<<"x-api-key: ${LINEARB_API_TOKEN}" -X POST "$LB/ap
 }' | jq --argjson id <repo_id> '.[0].metrics[] | select(.repository_id == $id)'
 ```
 
-- **Scope the request with the top-level `repository_ids: [<repo_id>]` — this is REQUIRED, not optional.** Without it the API returns only a **capped page (~25 repos)**; any repo outside that page comes back with **no matching row**, which the skill would misread as "signals unavailable → MEDIUM" and **silently under-grade a genuinely HIGH repo**. (The *nested* `filters.repository_ids` is the field that's ignored — use the **top-level** `repository_ids`. Keep the client-side `select(.repository_id == $id)` as a guard.) **If the filtered result is empty, the repo genuinely has no activity in the window** (dormant) — treat rework as absent and lean LOW on the repo axis; do **not** go hunting through pagination/`limit`, `repository_ids` is authoritative.
+- **Scope the request with the top-level `repository_ids: [<repo_id>]` — this is REQUIRED, not optional.** Without it the API returns only a **capped page (~25 repos)**; any repo outside that page comes back with **no matching row**, which the skill would misread as "signals unavailable → MEDIUM" and **silently under-grade a genuinely HIGH repo**. (The *nested* `filters.repository_ids` is the field that's ignored — use the **top-level** `repository_ids`. Keep the client-side `select(.repository_id == $id)` as a guard.) **If the call succeeded (no curl error) and the filtered result is empty, the repo genuinely has no activity in the window** (dormant) — treat rework as absent and lean LOW on the repo axis; do **not** go hunting through pagination/`limit`, `repository_ids` is authoritative.
 - `commit.activity.rework.rate` **is the rework percentage already** (server-side `rework.count / total_changes * 100`) — use it directly, do not divide again; if `null`, skip the rework signal.
 - `pr.merged.without.review.count > 0` = unreviewed-merge risk signal.
 - An **unknown metric name returns `0`, not an error** (a metric that's `0` across every repo means the name is wrong).
@@ -95,7 +98,7 @@ curl -sS -m 25 "${AUTH[@]}" <<<"x-api-key: ${LINEARB_API_TOKEN}" -X POST "$LB/ap
 **Incidents — org-level (`POST /api/v1/incidents/search`).** Incidents are org-scoped and usually untagged to a repo (PM/Jira-derived ones carry no repository), so a repo-filtered search typically returns nothing — query org-level and judge relevance from titles:
 
 ```bash
-curl -sS -m 25 "${AUTH[@]}" <<<"x-api-key: ${LINEARB_API_TOKEN}" -X POST "$LB/api/v1/incidents/search" -d '{
+curl -fsS -m 25 "${AUTH[@]}" <<<"x-api-key: ${LINEARB_API_TOKEN}" -X POST "$LB/api/v1/incidents/search" -d '{
   "limit": 50, "sort_by": "issued_at", "sort_dir": "desc"
 }' | jq '.items[] | {title, issued_at, ended_at, status}'
 ```
@@ -273,6 +276,7 @@ Keep this skill lightweight. Do not print a full report unless the user asks for
 - If the repositories list call times out or the repo isn't found → run org-level incidents only; don't block.
 - `POST /api/v1/incidents/search` can be slow → **retry once** before marking incidents unknown.
 - Only pass `repository_urls` with the exact `.git` URL — a mismatch can error rather than return empty.
-- If measurements errors or returns nulls → skip the rework/quality signals and lean on incidents.
+- If measurements fails or returns nulls → skip the rework/quality signals and lean on incidents — a failed call is *unavailable*, so it can never support LOW.
+- **HTTP 401/403 = invalid or expired token** → stop calling, grade MEDIUM (signals unavailable), and tell the user to refresh `LINEARB_API_TOKEN`.
 - A metric that is `0` across **every** repo in the response usually means a wrong metric name, not a healthy org — recheck the name.
 - Never block, throw, or refuse the code task because LinearB signals are unavailable.

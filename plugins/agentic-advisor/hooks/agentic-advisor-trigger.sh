@@ -25,7 +25,7 @@ set -uo pipefail
 command -v jq >/dev/null 2>&1 || exit 0
 
 # sha1 helper — shasum is macOS-only; sha1sum is the GNU/Linux name. Portable across both.
-sha1() { { shasum 2>/dev/null || sha1sum 2>/dev/null; } | cut -c1-16; }
+sha1() { if command -v shasum >/dev/null 2>&1; then shasum; elif command -v sha1sum >/dev/null 2>&1; then sha1sum; fi | cut -c1-16; }
 
 input="$(cat)"
 event="$(jq -r '.hook_event_name // empty' <<<"$input" 2>/dev/null || true)"
@@ -41,8 +41,10 @@ skill_ran() {
   grep -qE '"skill"[[:space:]]*:[[:space:]]*"[^"]*agentic-advisor[^"]*"' "$transcript" 2>/dev/null
 }
 
-marker_dir="${TMPDIR:-/tmp}/agentic-advisor"
-mkdir -p "$marker_dir" 2>/dev/null || true
+# Per-user state dir (not shared /tmp): another local user can't plant or read markers.
+marker_dir="${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor"
+(umask 077; mkdir -p "$marker_dir") 2>/dev/null || true
+[ -O "$marker_dir" ] || exit 0   # not ours / not creatable -> fail open
 
 # Stable per-repo key from a directory's git root (falls back to a session-only
 # key outside a git repo). Sets the global `marker` used by emit().
@@ -115,6 +117,8 @@ case "$event" in
     file_path="$(jq -r '.tool_input.file_path // empty' <<<"$input" 2>/dev/null || true)"
     [ -z "$file_path" ] && exit 0
     dir="$(dirname "$file_path")"
+    # A Write can target a folder that doesn't exist yet: check the nearest existing parent.
+    while [ ! -d "$dir" ] && [ "$dir" != "/" ] && [ "$dir" != "." ]; do dir="$(dirname "$dir")"; done
 
     # Only gate real source edits inside a git repo (skip docs/text, skip non-git).
     git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0

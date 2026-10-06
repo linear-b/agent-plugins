@@ -33,7 +33,8 @@
 #   * On by default whenever LINEARB_API_TOKEN is set; LINEARB_TELEMETRY=0 turns it off.
 #     No token in env -> silent no-op. Nobody is broken by default.
 #   * Fire-and-forget: short curl timeout, all failures swallowed, always exit 0.
-#   * Secret-safe: the token reaches curl on stdin (-H @-), never in its argv / process list.
+#   * Secret-safe: the token reaches curl on stdin (-H @-) and the payload via a private temp
+#     file, so neither appears in curl's argv / process list.
 #
 # Env: LINEARB_API_TOKEN — required to report; without it this is a silent no-op.
 #      LINEARB_TELEMETRY — set to 0 (or false/off/no) to disable reporting.
@@ -71,7 +72,7 @@ effort_actual="$(jq -r '.effort.level // empty'  <<<"$input" 2>/dev/null || true
 case "$event" in Stop|SessionEnd) : ;; *) exit 0 ;; esac
 
 # sha1 helper — shasum is macOS-only; sha1sum is the GNU/Linux name. Portable across both.
-sha1() { { shasum 2>/dev/null || sha1sum 2>/dev/null; } | cut -c1-16; }
+sha1() { if command -v shasum >/dev/null 2>&1; then shasum; elif command -v sha1sum >/dev/null 2>&1; then sha1sum; fi | cut -c1-16; }
 
 # graded vs baseline: deterministic per session (stable, no RNG), ~BASELINE_PCT% baseline.
 # If neither hash tool exists, bkt_hash is empty -> default to graded (never abort under set -u).
@@ -89,8 +90,11 @@ fi
 # nothing to say (the skill was withheld) -> bail early.
 [ "$label" = "baseline" ] && [ "$event" != "SessionEnd" ] && exit 0
 
-marker_dir="${TMPDIR:-/tmp}/agentic-advisor"
-mkdir -p "$marker_dir" 2>/dev/null || true
+# Per-user state dir (not shared /tmp): another local user can't plant or read markers.
+marker_dir="${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor"
+(umask 077; mkdir -p "$marker_dir") 2>/dev/null || true
+# Without a private, writable state dir dedup can't work -> skip rather than repeat events.
+[ -d "$marker_dir" ] && [ -O "$marker_dir" ] && [ -w "$marker_dir" ] || exit 0
 state="$marker_dir/${session_id:-default}.reported"
 touch "$state" 2>/dev/null || true
 
@@ -152,7 +156,7 @@ session_name="$(jq -r 'select(.type? == "custom-title") | .customTitle // empty'
 [ -z "$session_name" ] && session_name="$(jq -r 'select(.type? == "ai-title") | .aiTitle // empty' "$transcript" 2>/dev/null | tail -1)"
 
 # Model — which model the session ran (latest assistant turn); pairs with tokens for cost.
-model="$(jq -r 'select(.message.role? == "assistant") | .message.model? // empty' "$transcript" 2>/dev/null | grep -vx '<synthetic>' | tail -1)"
+model="$(jq -r 'select(.message.role? == "assistant") | .message.model? // empty' "$transcript" 2>/dev/null | grep -vx -e '<synthetic>' -e '' | tail -1)"
 
 # Plugin version — which plugin version produced this decision (from plugin.json).
 plugin_root="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd)}"
@@ -165,10 +169,12 @@ post() { # $1 = payload json
   # Detach: Claude Code does not wait for SessionEnd hooks before exiting, so run
   # curl in a fully backgrounded subshell (reparented to init) — the POST completes
   # even after the hook returns and the session process is gone.
-  # The token goes on stdin (-H @-), so it never appears in curl's argv.
-  ( curl -sS -m 5 -X POST "$REPORT_URL" \
-      -H @- -H "Content-Type: application/json" \
-      -d "$1" <<<"x-api-key: $token" >/dev/null 2>&1 & ) 2>/dev/null || true
+  # Token on stdin (-H @-), payload from a private temp file: neither is in curl's argv.
+  local pf; pf="$(umask 077; mktemp "$marker_dir/payload.XXXXXX" 2>/dev/null)" || return 0
+  printf '%s' "$1" > "$pf" || { rm -f "$pf"; return 0; }
+  ( ( curl -sS -m 5 -X POST "$REPORT_URL" \
+        -H @- -H "Content-Type: application/json" \
+        --data-binary @"$pf" <<<"x-api-key: $token" >/dev/null 2>&1; rm -f "$pf" ) & ) 2>/dev/null || true
 }
 
 # Transcript parse -> token windows + flags, in one pass. Run lazily (only once we know
