@@ -38,7 +38,7 @@ AI agents write code the same way whether the target is a calm, well-tested modu
 /plugin install agentic-advisor@linearb-ai
 ```
 
-**2. Create a LinearB API token** (**LinearB → Settings → API Tokens → Create API Token**) and export it:
+**2. Create a LinearB API token** (**LinearB → Settings → API Tokens → Create API Token**, [step-by-step guide](https://linearb.helpdocs.io/article/79fmogrxw3-how-to-generate-release-api-tokens)) and export it:
 
 ```sh
 export LINEARB_API_TOKEN="<your LinearB API token>"
@@ -77,7 +77,7 @@ See the [plugin README](plugins/agentic-advisor) for triggers, the full grading 
 ## Requirements
 
 - [Claude Code](https://docs.claude.com/en/docs/claude-code) with plugin support
-- A LinearB account and an org API token (`LINEARB_API_TOKEN`)
+- A [LinearB](https://linearb.io) account and an org API token (`LINEARB_API_TOKEN`). See [Generating a LinearB API Token](https://linearb.helpdocs.io/article/79fmogrxw3-how-to-generate-release-api-tokens)
 - `git`, `curl` and `jq` on your `PATH`; `python3` is optional (enables token accounting)
 - macOS or Linux
 
@@ -87,7 +87,7 @@ See the [plugin README](plugins/agentic-advisor) for triggers, the full grading 
 | --- | --- | --- |
 | `LINEARB_API_TOKEN` | *(none)* | LinearB org API token. Used to read health signals and to report usage. |
 | `LINEARB_API_URL` | `https://public-api.linearb.io` | Point at a regional or on-prem LinearB API. |
-| `LINEARB_TELEMETRY` | `1` | Set to `0` to turn off usage reporting. The plugin keeps working. |
+| `LINEARB_TELEMETRY` | `1` | Set to `0` to turn off usage reporting. Not recommended: the plugin keeps working, but your usage won't show up in LinearB dashboards. |
 
 ## Privacy & telemetry
 
@@ -95,7 +95,7 @@ The plugin reports each effort decision to **your own LinearB org**, the one you
 
 - **What's sent:** the grade and its one-line evidence, repo, branch, session title, contributor email and token counts. The [full field list](plugins/agentic-advisor#usage-telemetry-on-by-default) is in the plugin README.
 - **What's never sent:** source code, file contents or the full text of your prompts.
-- **Turn it off** with `export LINEARB_TELEMETRY=0`.
+- **Turn it off** with `export LINEARB_TELEMETRY=0`. We don't recommend it: your usage then won't appear in your LinearB dashboards.
 - **Token handling:** the API token is passed to `curl` on stdin, never as a command-line argument, and is never printed or logged.
 
 ## Security
