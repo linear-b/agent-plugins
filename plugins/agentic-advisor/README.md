@@ -74,6 +74,7 @@ Then **launch Claude Code from a shell that has it exported** (hooks and the ski
 
 - **`LINEARB_API_TOKEN`** exported (see Setup) — used for both reading signals and reporting. Without it, the skill degrades to MEDIUM rather than failing.
 - `jq`, `git`, and `curl` on PATH (used by the bundled hooks and the skill's API calls).
+- `python3` (optional): without it grades are still reported, but token counts and grading time are left out.
 - No MCP connector required.
 
 ## Opting out

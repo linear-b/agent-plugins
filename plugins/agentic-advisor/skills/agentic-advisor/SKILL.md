@@ -58,6 +58,8 @@ case "$raw" in
   *)           url="$raw" ;;
 esac
 case "$url" in *.git) : ;; *) url="${url%/}.git" ;; esac
+rest="${url#*://}"; host="${rest%%/*}"   # drop user:token@ so a credential is never matched or passed to jq
+case "$host" in *@*) url="${url%%://*}://${host##*@}${rest#"$host"}" ;; esac
 
 curl -fsS -m 20 "${AUTH[@]}" <<<"x-api-key: ${LINEARB_API_TOKEN}" "$LB/api/v1/repositories" \
   | jq -r --arg u "$url" --arg n "<repo-name>" '
@@ -112,8 +114,8 @@ The signals pick **one effort level** — LOW / MEDIUM / HIGH — that the agent
 | Effort | Signals (repo health) |
 | --- | --- |
 | **LOW** | Healthy: no open incidents, rework under 6%, no unreviewed merges, no recent serious incidents |
-| **MEDIUM** | Mild concern OR signals unavailable: rework 6-7%, a few unreviewed merges/bug PRs, 1-2 recent incidents — or LinearB data is missing/errored (default when we can't tell) |
-| **HIGH** | Fragile: rework above 7%, recent serious incident, many unreviewed merges, 5+ bug PRs, or a known incident in this repo's area |
+| **MEDIUM** | Mild concern OR signals unavailable: rework 6-7%, a few unreviewed merges, 1-2 recent incidents — or LinearB data is missing/errored (default when we can't tell) |
+| **HIGH** | Fragile: rework above 7%, recent serious incident, many unreviewed merges, or a known incident in this repo's area |
 
 The rework bands match **LinearB's own benchmark** (ELITE <3% and STRONG 3-6% → LOW; FAIR 6-7% → MEDIUM; NEEDS FOCUS >7% → HIGH) — not arbitrary cutoffs. Effort = the **highest-firing signal**: e.g. rework 8% alone is HIGH even with no incidents, and one serious open incident is HIGH even if rework is tiny.
 

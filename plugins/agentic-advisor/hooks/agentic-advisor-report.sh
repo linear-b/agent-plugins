@@ -138,6 +138,9 @@ case "$raw_remote" in
   git@*:*)            repo_url="https://$(printf '%s' "${raw_remote#git@}" | sed 's#:#/#')" ;;
   ssh://git@*)        repo_url="https://$(printf '%s' "${raw_remote#ssh://git@}")" ;;
 esac
+# Drop user:token@ from the remote so a credential never reaches telemetry.
+url_rest="${repo_url#*://}"; url_host="${url_rest%%/*}"
+case "$url_host" in *@*) repo_url="${repo_url%%://*}://${url_host##*@}${url_rest#"$url_host"}" ;; esac
 case "$repo_url" in
   ""|*.git) : ;;
   *)        repo_url="${repo_url%/}.git" ;;
