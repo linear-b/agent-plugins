@@ -110,7 +110,6 @@ if [ "$label" = "graded" ]; then
     vcount="$(grep -cE 'LinearB: .+ (LOW|MEDIUM|HIGH) effort' "$transcript" 2>/dev/null)"; vcount="${vcount:-0}"
     vseen="$marker_dir/${session_id:-default}.vseen"
     [ -f "$vseen" ] && [ "$(cat "$vseen" 2>/dev/null)" = "$vcount" ] && exit 0
-    printf '%s' "$vcount" > "$vseen" 2>/dev/null || true
   fi
 fi
 
@@ -293,8 +292,10 @@ fi
 
 # ---- graded path ----
 # (GATE 1 — skill actually ran — was already checked in the cheap fast-exit block above.)
-# Don't lock in a repo-less event (needs repo_url to join to the PR).
+# Don't lock in a repo-less event (needs repo_url to join to the PR). Mark this verdict
+# count seen only after that, so a Stop before the repo resolves retries on the next Stop.
 [ -n "$repo_url" ] || exit 0
+[ "$event" = "Stop" ] && [ -n "${vseen:-}" ] && { printf '%s' "$vcount" > "$vseen" 2>/dev/null || true; }
 
 # GATE 2 — a real assistant-authored verdict line exists, as text or as the hold's
 # `printf` Bash call (grep, not python, so it still works without python3).
@@ -316,9 +317,11 @@ parse_verdict() { # $1 = line
 }
 effort_val() { case "$1" in LOW) echo 1 ;; MEDIUM) echo 2 ;; HIGH) echo 3 ;; *) echo 0 ;; esac; }
 
-if [ "$event" = "Stop" ]; then
-  # DECISION event(s): report the grade the moment it exists — reliable, per turn,
-  # once per (repo|effort). No coding_tokens (not complete until the session ends).
+# DECISION event(s), once per (repo|effort) per session. Sent on Stop the moment the grade
+# exists; SessionEnd re-runs it to backfill any grade Stop missed (e.g. an interrupted turn
+# never fires Stop). No coding_tokens here (not complete until the session ends).
+report_decisions() {
+  local backfill=""; [ "$event" = "SessionEnd" ] && backfill="session_end"
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     parse_verdict "$line" || continue
@@ -331,7 +334,8 @@ if [ "$event" = "Stop" ]; then
       --arg effort "$veffort" --arg repo "$vrepo" --arg ev "$vev" \
       --arg email "$email" --arg repourl "$repo_url" --arg branch "$branch" \
       --arg actual "$effort_actual" --arg ticket "$ticket" --arg sname "$session_name" \
-      --arg gdur "$grading_duration" --arg model "$model" --arg gtok "$grading_tokens" --arg pver "$plugin_version" --arg idsrc "$identity_source" '
+      --arg gdur "$grading_duration" --arg model "$model" --arg gtok "$grading_tokens" --arg pver "$plugin_version" --arg idsrc "$identity_source" \
+      --arg backfill "$backfill" '
       {
         metric_name: $m, source: $src, timestamp: $ts, value: $val,
         entity: (
@@ -348,15 +352,18 @@ if [ "$event" = "Stop" ]; then
           (if $gdur   != "" then {grading_duration_s: $gdur}    else {} end) +
           (if $model  != "" then {model: $model}                else {} end) +
           (if $gtok   != "" then {grading_tokens: $gtok}        else {} end) +
-          (if $pver   != "" then {plugin_version: $pver}        else {} end)
+          (if $pver   != "" then {plugin_version: $pver}        else {} end) +
+          (if $backfill != "" then {backfill: $backfill}        else {} end)
         )
       }' 2>/dev/null)"
     [ -n "$payload" ] || continue
     post "$payload"
     printf '%s\n' "$key" >> "$state" 2>/dev/null || true
   done <<< "$verdicts"
-  exit 0
-fi
+}
+
+report_decisions
+[ "$event" = "Stop" ] && exit 0
 
 # event == SessionEnd, graded: TOKENS event — the whole-session coding_tokens, attributed
 # to the final (last) verdict. value 0 so it doesn't double-count on grade charts; the

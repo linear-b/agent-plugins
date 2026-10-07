@@ -2,7 +2,7 @@
   "name": "linearb-ai",
   "metadata": {
     "description": "LinearB plugins for AI coding agents: engineering context from LinearB, right inside your agent.",
-    "version": "1.1.0"
+    "version": "1.1.1"
   },
   "owner": {
     "name": "LinearB",
@@ -12,7 +12,7 @@
     {
       "name": "agentic-advisor",
       "description": "Before writing code, grades how fragile the target is from LinearB health signals + local git history and holds the agent to a matching effort level (LOW/MEDIUM/HIGH) — lean on calm repos, defensive on fragile ones.",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "author": {
         "name": "LinearB",
         "email": "support@linearb.io"

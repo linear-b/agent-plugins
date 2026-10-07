@@ -1,6 +1,6 @@
 {
   "name": "agentic-advisor",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Before writing code, grades how fragile the target is from LinearB health signals + local git history (rework, incidents, fix/revert density, code ownership) and holds the agent to a matching effort level (LOW/MEDIUM/HIGH) — lean on calm repos, defensive on fragile ones. Auto-triggers via a bundled hook and can report each effort decision to your LinearB org as usage telemetry.",
   "author": {
     "name": "LinearB",
