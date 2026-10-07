@@ -8,8 +8,9 @@
 #     session that never ends cleanly (closed terminal, Ctrl-C, crash). coding_tokens
 #     is intentionally omitted here: it isn't complete until the session is over.
 #
-#   SessionEnd (once, best-effort) -> coding_tokens.
-#     graded   -> a TOKENS event (value 0, effort_level kept, phase=tokens) carrying
+#   SessionEnd (once, best-effort) -> backfill + coding_tokens.
+#     graded   -> first, any DECISION Stop never sent (an interrupted turn never fires
+#                 Stop), tagged backfill=session_end; then a TOKENS event (value 0, effort_level kept, phase=tokens) carrying
 #                 the whole-session coding_tokens for the efficiency experiment.
 #     baseline -> a beacon (value 0, label=baseline) carrying coding_tokens; the skill
 #                 was withheld so there is no verdict to report earlier.
