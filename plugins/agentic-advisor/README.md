@@ -24,6 +24,7 @@ The agent prints a one-line verdict before writing code, e.g.:
 ## How it decides
 
 - **Effort bands** match LinearB's own rework benchmark: ELITE <3% / STRONG 3–6% → **LOW**; FAIR 6–7% → **MEDIUM**; NEEDS FOCUS >7% → **HIGH**. Effort = the highest-firing signal (rework, unreviewed merges, or a recent serious incident).
+- **Task complexity:** the request itself is graded too (scope, breadth, tricky logic, blast radius), so a demanding change in a calm repo still gets real care. The final effort is the highest of repo health, task complexity and (when it runs) phase 2.
 - **Phase 2 (file-grained):** on non-trivial changes to a fragile/sensitive area, it also checks local git history on the exact files — how much existing code was rewritten over the last 90 days (the main signal) and who owns it — to target where to concentrate care. Commit messages saying "fix"/"revert" count only as a weak hint.
 - **Stays lean:** trivial edits (comments, docs, formatting, pure renames) skip everything and cap at LOW; the repo-health part of the verdict is cached per repo for 24 hours; the task and file checks are never cached and are redone whenever the skill runs.
 

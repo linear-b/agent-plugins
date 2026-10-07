@@ -43,9 +43,19 @@ skill_ran() {
   grep -qE '"skill"[[:space:]]*:[[:space:]]*"[^"]*agentic-advisor[^"]*"' "$transcript" 2>/dev/null
 }
 
-# Has an assistant message printed the verdict line the reporter parses?
-verdict_printed() {
-  grep -qE '"role":"assistant".*LinearB: [^"]* (LOW|MEDIUM|HIGH) effort' "$transcript" 2>/dev/null
+# Is the LATEST advisor Skill call still missing its verdict (assistant text, or the
+# hold's `printf` Bash call)? Prints "pending" or "ok"; prints nothing on parse failure.
+verdict_state() {
+  jq -rs --arg n "agentic-advisor" --arg re 'LinearB: .+ (LOW|MEDIUM|HIGH) effort' '
+    [.[] | select(.message.role? == "assistant") | .message.content? // [] | .[]?] as $c
+    | [$c | to_entries[] | select(.value.type? == "tool_use" and .value.name? == "Skill"
+        and ((.value.input.skill? // "") | tostring | contains($n))) | .key] as $sk
+    | if ($sk | length) == 0 then "ok"
+      elif ($c[($sk[-1] + 1):] | any(
+          (.type? == "text" and ((.text? // "") | test($re)))
+          or (.type? == "tool_use" and .name? == "Bash"
+              and ((.input.command? // "") | test("(^|\\n|;|&&)\\s*printf\\s[^\\n]*" + $re)))))
+      then "ok" else "pending" end' "$transcript" 2>/dev/null
 }
 
 deny() { # $1 = reason fed back to the model
@@ -119,11 +129,16 @@ case "$event" in
     ;;
 
   PreToolUse)
-    # Verdict gate: once per session, hold the first non-shell tool after the skill ran
-    # until the verdict line is visible (telemetry and the user both need it).
-    if skill_ran && ! verdict_printed; then
-      vheld="$marker_dir/${session_id:-default}.vheld"
-      [ ! -f "$vheld" ] && : > "$vheld" 2>/dev/null && deny "LinearB: one quick step first — record this session's effort grade by running: printf '%s\\n' '> LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan>' (the grade is only recorded from that line, not from thinking). Then retry this same call; it won't pause again."
+    # Verdict gate: once per advisor run, hold the first non-shell tool until that run's
+    # verdict line exists. Keyed by the run count so a second repo's run is gated too, and
+    # the transcript is parsed only until that run is settled (marker short-circuits).
+    if skill_ran; then
+      runs="$(grep -cE '"skill"[[:space:]]*:[[:space:]]*"[^"]*'"agentic-advisor"'[^"]*"' "$transcript" 2>/dev/null)"
+      vdone="$marker_dir/${session_id:-default}.${runs:-0}.vdone"
+      if [ ! -f "$vdone" ]; then
+        state="$(verdict_state)"
+        [ -n "$state" ] && : > "$vdone" 2>/dev/null && [ "$state" = "pending" ] && deny "LinearB: one quick step first — record this session's effort grade by running: printf '%s\\n' '> LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan>' (the grade is only recorded from that line, not from thinking). Then retry this same call; it won't pause again."
+      fi
     fi
     tool="$(jq -r '.tool_name // empty' <<<"$input" 2>/dev/null || true)"
     case "$tool" in Read|Grep|Glob|Task|Agent) exit 0 ;; esac

@@ -227,7 +227,8 @@ for line in open(sys.argv[1]):
         # SKILL.md examples that load on invocation (they also match the pattern).
         elif role == "assistant" and skill is not None and verdict is None \
              and re.search(r"LinearB: .+ (LOW|MEDIUM|HIGH) effort", (x.get("text") or "") if typ == "text" else
-                           str((x.get("input") or {}).get("command", "")) if typ == "tool_use" and x.get("name") == "Bash" else ""):
+                           str((x.get("input") or {}).get("command", "")) if typ == "tool_use" and x.get("name") == "Bash"
+                           and re.search(r"(^|\n|;|&&)\s*printf\s[^\n]*LinearB: ", str((x.get("input") or {}).get("command", ""))) else ""):
             verdict = te
 out = {"grading_tokens": "", "coding_tokens": "", "grading_duration_s": "",
        "has_edit": first_edit is not None}
@@ -297,7 +298,7 @@ fi
 
 # GATE 2 — a real assistant-authored verdict line exists, as text or as the hold's
 # `printf` Bash call (grep, not python, so it still works without python3).
-verdicts="$(jq -r 'select(.message.role? == "assistant") | .message.content? // [] | .[]? | if .type? == "text" then .text? // empty elif .type? == "tool_use" and .name? == "Bash" then .input.command? // empty else empty end' "$transcript" 2>/dev/null \
+verdicts="$(jq -r 'select(.message.role? == "assistant") | .message.content? // [] | .[]? | if .type? == "text" then .text? // empty elif .type? == "tool_use" and .name? == "Bash" and ((.input.command? // "") | test("(^|\\n|;|&&)\\s*printf\\s[^\\n]*LinearB: ")) then .input.command else empty end' "$transcript" 2>/dev/null \
   | grep -E 'LinearB: .+ (LOW|MEDIUM|HIGH) effort' || true)"
 [ -n "$verdicts" ] || exit 0
 
