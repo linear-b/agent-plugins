@@ -11,7 +11,9 @@
 #                   High precision: a ticket almost always means "starting work".
 #     2. FALLBACK - code-task keywords, for ad-hoc fixes with no ticket.
 #
-#   PreToolUse (matcher Edit|Write)
+#   PreToolUse (matcher Edit|Write|Read|Grep|Glob|Task|Agent)
+#     VERDICT  - the skill ran but no verdict line was printed yet (at low effort the
+#                model keeps it in thinking): hold the next tool once so it prints it.
 #     BACKSTOP - a code edit is starting and this repo wasn't nudged yet this
 #                session. Catches tasks that slipped past the prompt gate.
 #
@@ -41,6 +43,27 @@ skill_ran() {
   grep -qE '"skill"[[:space:]]*:[[:space:]]*"[^"]*agentic-advisor[^"]*"' "$transcript" 2>/dev/null
 }
 
+# Is the LATEST advisor Skill call still missing its verdict (assistant text, or the
+# hold's `printf` Bash call)? Prints "pending" or "ok"; prints nothing on parse failure.
+verdict_state() {
+  jq -rs --arg n "agentic-advisor" --arg re 'LinearB: .+ (LOW|MEDIUM|HIGH) effort' '
+    [.[] | select(.message.role? == "assistant") | .message.content? // [] | .[]?] as $c
+    | [$c | to_entries[] | select(.value.type? == "tool_use" and .value.name? == "Skill"
+        and ((.value.input.skill? // "") | tostring | contains($n))) | .key] as $sk
+    | if ($sk | length) == 0 then "ok"
+      elif ($c[($sk[-1] + 1):] | any(
+          (.type? == "text" and ((.text? // "") | test($re)))
+          or (.type? == "tool_use" and .name? == "Bash"
+              and ((.input.command? // "") | test("(^|\\n|;|&&)\\s*printf\\s[^\\n]*" + $re)))))
+      then "ok" else "pending" end' "$transcript" 2>/dev/null
+}
+
+deny() { # $1 = reason fed back to the model
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":%s}}\n' \
+    "$(printf '%s' "$1" | jq -Rs .)"
+  exit 0
+}
+
 # Per-user state dir (not shared /tmp): another local user can't plant or read markers.
 marker_dir="${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor"
 (umask 077; mkdir -p "$marker_dir") 2>/dev/null || true
@@ -58,7 +81,7 @@ set_marker() { # $1 = a directory inside the repo
 }
 
 # Imperative, silent guidance — no permission question, no announcement.
-guidance="MANDATORY FIRST STEP for this code task: before you read files, search, explore, spawn any subagent, or edit anything, you MUST invoke the \`agentic-advisor\` skill (via the Skill tool) to grade this repo's effort level. Do not start the task, do not touch code, until you have run it and printed its verdict line. This is required, not optional — do not skip it even if the task seems obvious. Invoke it directly (no need to ask the user or announce it). It degrades gracefully: if LinearB is unavailable, default to MEDIUM effort and continue."
+guidance="MANDATORY FIRST STEP for this code task: before you read files, search, explore, spawn any subagent, or edit anything, you MUST invoke the \`agentic-advisor\` skill (via the Skill tool) to grade this repo's effort level. Do not start the task, do not touch code, until you have run it and printed its verdict line verbatim in this shape: > LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan> (a hook parses that line; a prose summary is not recorded). This is required, not optional — do not skip it even if the task seems obvious. Invoke it directly (no need to ask the user or announce it). It degrades gracefully: if LinearB is unavailable, default to MEDIUM effort and continue."
 
 # Mark handled (this session+repo) and emit additionalContext for the event.
 emit() { # $1 = hookEventName, $2 = context text
@@ -106,7 +129,22 @@ case "$event" in
     ;;
 
   PreToolUse)
-    # Reached only for Edit|Write (matcher in settings). ONE-TIME grade-before-edit
+    # Verdict gate: once per advisor run, hold the first non-shell tool until that run's
+    # verdict line exists. Keyed by the run count so a second repo's run is gated too, and
+    # the transcript is parsed only until that run is settled (marker short-circuits).
+    if skill_ran; then
+      # Count only assistant Skill calls (same thing verdict_state indexes), not echoes elsewhere.
+      runs="$(grep '"role":"assistant"' "$transcript" 2>/dev/null | grep -cE '"skill"[[:space:]]*:[[:space:]]*"[^"]*'"agentic-advisor"'[^"]*"')"
+      vdone="$marker_dir/${session_id:-default}.${runs:-0}.vdone"
+      if [ ! -f "$vdone" ]; then
+        state="$(verdict_state)"
+        [ -n "$state" ] && : > "$vdone" 2>/dev/null && [ "$state" = "pending" ] && deny "LinearB: one quick step first — record this session's effort grade by running: printf '%s\\n' '> LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan>' (the grade is only recorded from that line, not from thinking). Then retry this same call; it won't pause again."
+      fi
+    fi
+    tool="$(jq -r '.tool_name // empty' <<<"$input" 2>/dev/null || true)"
+    case "$tool" in Read|Grep|Glob|Task|Agent) exit 0 ;; esac
+
+    # Edit|Write only from here. ONE-TIME grade-before-edit
     # HOLD: the FIRST source edit in a repo this session is denied (permissionDecision:deny) so the
     # skill grades before code is written. Held at most ONCE per repo/session (via
     # its own dedicated .held marker — NOT the UserPromptSubmit nudge (.done) marker,
@@ -144,10 +182,8 @@ case "$event" in
     # prefix) and feeds that reason to the model. FAIL OPEN if we can't record the
     # marker (don't wedge).
     : > "$held" 2>/dev/null || exit 0
-    reason="One quick first step before this edit: run the \`agentic-advisor\` skill to grade this repo's effort (just this once per repo, this session). Print its verdict, then make the same edit again — it'll go right through, and later edits won't pause. If LinearB isn't available it just defaults to MEDIUM."
-    printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":%s}}\n' \
-      "$(printf '%s' "$reason" | jq -Rs .)"
-    exit 0
+    reason="One quick first step before this edit: run the \`agentic-advisor\` skill to grade this repo's effort (just this once per repo, this session). Print its verdict line (> LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (…) — …), then make the same edit again — it'll go right through, and later edits won't pause. If LinearB isn't available it just defaults to MEDIUM."
+    deny "$reason"
     ;;
 esac
 
