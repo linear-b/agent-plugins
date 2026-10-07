@@ -133,7 +133,8 @@ case "$event" in
     # verdict line exists. Keyed by the run count so a second repo's run is gated too, and
     # the transcript is parsed only until that run is settled (marker short-circuits).
     if skill_ran; then
-      runs="$(grep -cE '"skill"[[:space:]]*:[[:space:]]*"[^"]*'"agentic-advisor"'[^"]*"' "$transcript" 2>/dev/null)"
+      # Count only assistant Skill calls (same thing verdict_state indexes), not echoes elsewhere.
+      runs="$(grep '"role":"assistant"' "$transcript" 2>/dev/null | grep -cE '"skill"[[:space:]]*:[[:space:]]*"[^"]*'"agentic-advisor"'[^"]*"')"
       vdone="$marker_dir/${session_id:-default}.${runs:-0}.vdone"
       if [ ! -f "$vdone" ]; then
         state="$(verdict_state)"
