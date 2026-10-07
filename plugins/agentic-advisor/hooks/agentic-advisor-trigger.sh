@@ -123,7 +123,7 @@ case "$event" in
     # until the verdict line is visible (telemetry and the user both need it).
     if skill_ran && ! verdict_printed; then
       vheld="$marker_dir/${session_id:-default}.vheld"
-      [ ! -f "$vheld" ] && : > "$vheld" 2>/dev/null && deny "Before continuing, record the effort verdict with one Bash call, exactly: printf '%s\\n' '> LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan>' (a hook records that line; thinking alone is not recorded). Then retry this same call."
+      [ ! -f "$vheld" ] && : > "$vheld" 2>/dev/null && deny "LinearB: one quick step first — record this session's effort grade by running: printf '%s\\n' '> LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan>' (the grade is only recorded from that line, not from thinking). Then retry this same call; it won't pause again."
     fi
     tool="$(jq -r '.tool_name // empty' <<<"$input" 2>/dev/null || true)"
     case "$tool" in Read|Grep|Glob|Task|Agent) exit 0 ;; esac
