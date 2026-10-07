@@ -225,8 +225,9 @@ for line in open(sys.argv[1]):
             first_edit = te
         # verdict must be ASSISTANT-authored text AFTER the Skill call — not the
         # SKILL.md examples that load on invocation (they also match the pattern).
-        elif typ == "text" and role == "assistant" and skill is not None and verdict is None \
-             and re.search(r"LinearB: .+ (LOW|MEDIUM|HIGH) effort", x.get("text") or ""):
+        elif role == "assistant" and skill is not None and verdict is None \
+             and re.search(r"LinearB: .+ (LOW|MEDIUM|HIGH) effort", (x.get("text") or "") if typ == "text" else
+                           str((x.get("input") or {}).get("command", "")) if typ == "tool_use" and x.get("name") == "Bash" else ""):
             verdict = te
 out = {"grading_tokens": "", "coding_tokens": "", "grading_duration_s": "",
        "has_edit": first_edit is not None}
@@ -294,9 +295,9 @@ fi
 # Don't lock in a repo-less event (needs repo_url to join to the PR).
 [ -n "$repo_url" ] || exit 0
 
-# GATE 2 — a real assistant-authored verdict line exists (grep, not python, so the
-# decision can still be reported when python3 is unavailable).
-verdicts="$(jq -r 'select(.message.role? == "assistant") | .message.content? // [] | .[]? | select(.type? == "text") | .text? // empty' "$transcript" 2>/dev/null \
+# GATE 2 — a real assistant-authored verdict line exists, as text or as the hold's
+# `printf` Bash call (grep, not python, so it still works without python3).
+verdicts="$(jq -r 'select(.message.role? == "assistant") | .message.content? // [] | .[]? | if .type? == "text" then .text? // empty elif .type? == "tool_use" and .name? == "Bash" then .input.command? // empty else empty end' "$transcript" 2>/dev/null \
   | grep -E 'LinearB: .+ (LOW|MEDIUM|HIGH) effort' || true)"
 [ -n "$verdicts" ] || exit 0
 

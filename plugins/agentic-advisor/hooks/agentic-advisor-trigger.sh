@@ -11,7 +11,9 @@
 #                   High precision: a ticket almost always means "starting work".
 #     2. FALLBACK - code-task keywords, for ad-hoc fixes with no ticket.
 #
-#   PreToolUse (matcher Edit|Write)
+#   PreToolUse (matcher Edit|Write|Read|Grep|Glob|Task|Agent)
+#     VERDICT  - the skill ran but no verdict line was printed yet (at low effort the
+#                model keeps it in thinking): hold the next tool once so it prints it.
 #     BACKSTOP - a code edit is starting and this repo wasn't nudged yet this
 #                session. Catches tasks that slipped past the prompt gate.
 #
@@ -41,6 +43,17 @@ skill_ran() {
   grep -qE '"skill"[[:space:]]*:[[:space:]]*"[^"]*agentic-advisor[^"]*"' "$transcript" 2>/dev/null
 }
 
+# Has an assistant message printed the verdict line the reporter parses?
+verdict_printed() {
+  grep -qE '"role":"assistant".*LinearB: [^"]* (LOW|MEDIUM|HIGH) effort' "$transcript" 2>/dev/null
+}
+
+deny() { # $1 = reason fed back to the model
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":%s}}\n' \
+    "$(printf '%s' "$1" | jq -Rs .)"
+  exit 0
+}
+
 # Per-user state dir (not shared /tmp): another local user can't plant or read markers.
 marker_dir="${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor"
 (umask 077; mkdir -p "$marker_dir") 2>/dev/null || true
@@ -58,7 +71,7 @@ set_marker() { # $1 = a directory inside the repo
 }
 
 # Imperative, silent guidance — no permission question, no announcement.
-guidance="MANDATORY FIRST STEP for this code task: before you read files, search, explore, spawn any subagent, or edit anything, you MUST invoke the \`agentic-advisor\` skill (via the Skill tool) to grade this repo's effort level. Do not start the task, do not touch code, until you have run it and printed its verdict line. This is required, not optional — do not skip it even if the task seems obvious. Invoke it directly (no need to ask the user or announce it). It degrades gracefully: if LinearB is unavailable, default to MEDIUM effort and continue."
+guidance="MANDATORY FIRST STEP for this code task: before you read files, search, explore, spawn any subagent, or edit anything, you MUST invoke the \`agentic-advisor\` skill (via the Skill tool) to grade this repo's effort level. Do not start the task, do not touch code, until you have run it and printed its verdict line verbatim in this shape: > LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan> (a hook parses that line; a prose summary is not recorded). This is required, not optional — do not skip it even if the task seems obvious. Invoke it directly (no need to ask the user or announce it). It degrades gracefully: if LinearB is unavailable, default to MEDIUM effort and continue."
 
 # Mark handled (this session+repo) and emit additionalContext for the event.
 emit() { # $1 = hookEventName, $2 = context text
@@ -106,7 +119,16 @@ case "$event" in
     ;;
 
   PreToolUse)
-    # Reached only for Edit|Write (matcher in settings). ONE-TIME grade-before-edit
+    # Verdict gate: once per session, hold the first non-shell tool after the skill ran
+    # until the verdict line is visible (telemetry and the user both need it).
+    if skill_ran && ! verdict_printed; then
+      vheld="$marker_dir/${session_id:-default}.vheld"
+      [ ! -f "$vheld" ] && : > "$vheld" 2>/dev/null && deny "Before continuing, record the effort verdict with one Bash call, exactly: printf '%s\\n' '> LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan>' (a hook records that line; thinking alone is not recorded). Then retry this same call."
+    fi
+    tool="$(jq -r '.tool_name // empty' <<<"$input" 2>/dev/null || true)"
+    case "$tool" in Read|Grep|Glob|Task|Agent) exit 0 ;; esac
+
+    # Edit|Write only from here. ONE-TIME grade-before-edit
     # HOLD: the FIRST source edit in a repo this session is denied (permissionDecision:deny) so the
     # skill grades before code is written. Held at most ONCE per repo/session (via
     # its own dedicated .held marker — NOT the UserPromptSubmit nudge (.done) marker,
@@ -144,10 +166,8 @@ case "$event" in
     # prefix) and feeds that reason to the model. FAIL OPEN if we can't record the
     # marker (don't wedge).
     : > "$held" 2>/dev/null || exit 0
-    reason="One quick first step before this edit: run the \`agentic-advisor\` skill to grade this repo's effort (just this once per repo, this session). Print its verdict, then make the same edit again — it'll go right through, and later edits won't pause. If LinearB isn't available it just defaults to MEDIUM."
-    printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":%s}}\n' \
-      "$(printf '%s' "$reason" | jq -Rs .)"
-    exit 0
+    reason="One quick first step before this edit: run the \`agentic-advisor\` skill to grade this repo's effort (just this once per repo, this session). Print its verdict line (> LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (…) — …), then make the same edit again — it'll go right through, and later edits won't pause. If LinearB isn't available it just defaults to MEDIUM."
+    deny "$reason"
     ;;
 esac
 

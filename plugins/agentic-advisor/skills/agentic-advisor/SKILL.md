@@ -9,6 +9,19 @@ description: Pull LinearB health signals for a repository before and during code
 
 Run this at the start of a code task to load the repo's current health signals, then let them set how much effort to spend writing the code. This is writing-phase guidance only — it does not gate merges, pushes, PRs, or deploys.
 
+## Output contract (read this first)
+
+Right after the repo sweep, your first assistant text **must be this verdict line, verbatim in shape**, as a markdown blockquote:
+
+> LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <what you will do differently>
+
+- **A hook parses this exact line** to record the decision. Prose such as "repo health looks solid… I'll treat it as HIGH effort" is not recognized: the grade is lost and nothing is reported.
+- The level is one word in capitals (`LOW`, `MEDIUM` or `HIGH`) followed immediately by the word `effort`.
+- Explanation may follow on later lines, but the verdict line comes first and is never reworded.
+- If you aren't writing visible text at this point, record it with one Bash call instead: `printf '%s\n' '> LinearB: <repo> — <LEVEL> effort (<evidence>) — <plan>'`. A hook holds your next file read or edit until one of the two exists.
+
+Example: `> LinearB: api-service — HIGH effort (rework 3.4%, calm repo — but auth refactor with wide blast radius) — small behavior-preserving steps, tests green, confirm scope first.`
+
 ## Access (read first)
 
 All signals come from LinearB's **public API** over `curl` — no MCP connector needed. The base URL defaults to `https://public-api.linearb.io`; on-prem or regional deployments override it with `LINEARB_API_URL`. Authentication is a single org-scoped token in the `LINEARB_API_TOKEN` environment variable (created in the LinearB UI: **Settings → API Tokens → Create API Token**). Set up shared values once (`Content-Type` is required even on GET). The token is fed to `curl` on stdin (`-H @-` plus `<<<"x-api-key: …"` on each call), never as an argument, so it can't show up in process listings:
