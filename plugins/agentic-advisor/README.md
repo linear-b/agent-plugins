@@ -40,7 +40,7 @@ Bundled hooks can report each effort decision to LinearB's reported-metrics API 
 
 | event | when | `value` | token tag |
 | --- | --- | --- | --- |
-| **decision** (`phase=decision`) | on `Stop`, right after the verdict — once per repo + effort level per session | `1` / `2` / `3` = LOW / MEDIUM / HIGH | `grading_tokens` — output tokens spent producing the verdict |
+| **decision** (`phase=decision`) | on `Stop`, right after the verdict (or at `SessionEnd`, tagged `backfill: session_end`, if that turn was interrupted) — once per repo + effort level per session | `1` / `2` / `3` = LOW / MEDIUM / HIGH | `grading_tokens` — output tokens spent producing the verdict |
 | **tokens** (`phase=tokens`) | on `SessionEnd`, best-effort | `0` (not a grade — exclude from grade aggregates) | `coding_tokens` — output tokens spent on the work after the verdict |
 
 Count adoption and grades from **`phase=decision`** rows; use **`phase=tokens`** rows only for the coding-token measurement. (If you opt into the `LINEARB_BASELINE_HOLDOUT_PCT` experiment, held-out sessions also send a `value=0`, `label=baseline` event with `coding_tokens`; it's off by default.)
