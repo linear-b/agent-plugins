@@ -114,7 +114,7 @@ teardown
 setup
 add_skill; add_verdict
 run "$REPORT" SessionEnd
-await_calls 1
+await_calls 2 # decision + tokens, posted concurrently
 check "report: SessionEnd backfills a missed DECISION" backfilled
 teardown
 
