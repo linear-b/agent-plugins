@@ -7,7 +7,7 @@ on:
       - main
 
 concurrency:
-  group: ci_workflow_${{ github.head_ref || github.ref_name }}
+  group: ci_workflow_${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -57,8 +57,10 @@ jobs:
 
       - name: Run hook tests
         run: |
+          fail=0
           for t in tests/*/*_test.sh; do
             echo "::group::$t"
-            "$t"
+            "$t" || fail=1
             echo "::endgroup::"
           done
+          exit $fail

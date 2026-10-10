@@ -25,7 +25,8 @@ setup() {
   cat > "$T/bin/curl" <<STUB
 #!/usr/bin/env bash
 while [ \$# -gt 0 ]; do
-  case "\$1" in --data-binary) cat "\${2#@}" > "\$(mktemp "$T/curl/call.XXXXXX")"; shift ;; esac
+  # Write then rename, so await_calls never sees a half-written payload.
+  case "\$1" in --data-binary) tmp="\$(mktemp "$T/payload.XXXXXX")"; cat "\${2#@}" > "\$tmp"; mv "\$tmp" "$T/curl/call.\${tmp##*.}"; shift ;; esac
   shift
 done
 cat >/dev/null
