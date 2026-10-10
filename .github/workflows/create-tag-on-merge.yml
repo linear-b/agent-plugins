@@ -14,6 +14,8 @@ concurrency:
 
 jobs:
   create-tag:
+    # Manual runs must not release from a non-main branch.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

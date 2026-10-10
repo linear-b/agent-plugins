@@ -13,7 +13,8 @@ for dir in plugins/*/; do
   dir="${dir%/}"
   name="$(basename "$dir")"
   # README/CHANGELOG edits don't change what users run, so they don't need a release.
-  git diff --name-only "$base"...HEAD -- "$dir" | grep -qvE "^$dir/(README|CHANGELOG)\.md$" || continue
+  # Process substitution, not a pipe: grep -q exiting early can't fail the check under pipefail.
+  grep -qvE "^$dir/(README|CHANGELOG)\.md$" < <(git diff --name-only "$base"...HEAD -- "$dir") || continue
 
   new="$(jq -r .version "$dir/.claude-plugin/plugin.json")"
   old="$(git show "$base:$dir/.claude-plugin/plugin.json" 2>/dev/null | jq -r .version 2>/dev/null || true)"
