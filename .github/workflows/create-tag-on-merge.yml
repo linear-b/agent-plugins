@@ -8,10 +8,6 @@ on:
     paths:
       - plugins/*/.claude-plugin/plugin.json
 
-concurrency:
-  group: create_tag_on_merge
-  cancel-in-progress: false
-
 jobs:
   create-tag:
     # Manual runs must not release from a non-main branch.
@@ -38,6 +34,10 @@ jobs:
               continue
             fi
             scripts/changelog-section.sh "$dir" "$version" > "$RUNNER_TEMP/notes.md"
+            if [ -z "$(tr -d '[:space:]' < "$RUNNER_TEMP/notes.md")" ]; then
+              echo "::error file=$dir/CHANGELOG.md::$name $version has no CHANGELOG section, not releasing."
+              exit 1
+            fi
             # Creates the tag at this commit if it doesn't exist yet.
             gh release create "$tag" --target "$GITHUB_SHA" --title "$name $version" --notes-file "$RUNNER_TEMP/notes.md"
           done
