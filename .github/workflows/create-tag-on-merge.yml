@@ -1,0 +1,43 @@
+name: Create Tag on Merge and Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - plugins/*/.claude-plugin/plugin.json
+
+jobs:
+  create-tag:
+    # Manual runs must not release from a non-main branch.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Create tag and GitHub Release for new plugin versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for dir in plugins/*/; do
+            dir="${dir%/}"
+            read -r name version < <(jq -r '"\(.name) \(.version)"' "$dir/.claude-plugin/plugin.json")
+            # Same <plugin>--v<version> format as `claude plugin tag`.
+            tag="${name}--v${version}"
+            if gh release view "$tag" >/dev/null 2>&1; then
+              echo "$tag already released"
+              continue
+            fi
+            scripts/changelog-section.sh "$dir" "$version" > "$RUNNER_TEMP/notes.md"
+            if [ -z "$(tr -d '[:space:]' < "$RUNNER_TEMP/notes.md")" ]; then
+              echo "::error file=$dir/CHANGELOG.md::$name $version has no CHANGELOG section, not releasing."
+              exit 1
+            fi
+            # Creates the tag at this commit if it doesn't exist yet.
+            gh release create "$tag" --target "$GITHUB_SHA" --title "$name $version" --notes-file "$RUNNER_TEMP/notes.md"
+          done
