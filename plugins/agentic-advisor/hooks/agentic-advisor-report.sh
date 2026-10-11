@@ -39,12 +39,22 @@
 #
 # Env: LINEARB_API_TOKEN — required to report; without it this is a silent no-op.
 #      LINEARB_TELEMETRY — set to 0 (or false/off/no) to disable reporting.
+#      LINEARB_DEBUG — set to 1 to log each outcome (skip reason or HTTP status) to
+#      ~/.cache/agentic-advisor/report.log. Never logs the token, email or payload.
 #      LINEARB_API_URL — API base URL (default https://public-api.linearb.io); set it
 #      for on-prem or regional LinearB deployments.
 #      LINEARB_BASELINE_HOLDOUT_PCT (default 0 — disabled) — % of sessions withheld as a no-grade
 #      baseline for a graded-vs-baseline holdout; set e.g. 20 to run that experiment.
 
 set -uo pipefail
+
+# Opt-in troubleshooting log (LINEARB_DEBUG=1): one line per outcome, no secrets or payloads.
+dbg() {
+  [ "${LINEARB_DEBUG:-}" = "1" ] || return 0
+  local d="${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor"
+  (umask 077; mkdir -p "$d") 2>/dev/null; [ -O "$d" ] || return 0
+  (umask 077; printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$d/report.log") 2>/dev/null || true
+}
 
 API_URL="${LINEARB_API_URL:-https://public-api.linearb.io}"
 REPORT_URL="${API_URL%/}/api/v1/report/metric"
@@ -53,13 +63,13 @@ SOURCE="claude-code"
 BASELINE_PCT="${LINEARB_BASELINE_HOLDOUT_PCT:-0}"
 
 # Telemetry opt-out.
-case "$(printf '%s' "${LINEARB_TELEMETRY:-1}" | tr '[:upper:]' '[:lower:]')" in 0|false|off|no) exit 0 ;; esac
+case "$(printf '%s' "${LINEARB_TELEMETRY:-1}" | tr '[:upper:]' '[:lower:]')" in 0|false|off|no) dbg "skip: LINEARB_TELEMETRY is off"; exit 0 ;; esac
 
 token="${LINEARB_API_TOKEN:-}"
-[ -n "$token" ] || exit 0
+[ -n "$token" ] || { dbg "skip: LINEARB_API_TOKEN not set in this session"; exit 0; }
 
-command -v jq   >/dev/null 2>&1 || exit 0
-command -v curl >/dev/null 2>&1 || exit 0
+command -v jq   >/dev/null 2>&1 || { dbg "skip: jq not found"; exit 0; }
+command -v curl >/dev/null 2>&1 || { dbg "skip: curl not found"; exit 0; }
 
 input="$(cat)"
 event="$(jq -r '.hook_event_name // empty'      <<<"$input" 2>/dev/null || true)"
@@ -167,7 +177,7 @@ plugin_version="$(jq -r '.version // empty' "$plugin_root/.claude-plugin/plugin.
 
 ts="$(( $(date +%s) * 1000 ))"
 
-post() { # $1 = payload json
+post() { # $1 = payload json, $2 = short description for the debug log
   [ -n "$1" ] || return 0
   # Detach: Claude Code does not wait for SessionEnd hooks before exiting, so run
   # curl in a fully backgrounded subshell (reparented to init) — the POST completes
@@ -175,9 +185,10 @@ post() { # $1 = payload json
   # Token on stdin (-H @-), payload from a private temp file: neither is in curl's argv.
   local pf; pf="$(umask 077; mktemp "$marker_dir/payload.XXXXXX" 2>/dev/null)" || return 0
   printf '%s' "$1" > "$pf" || { rm -f "$pf"; return 0; }
-  ( ( curl -sS -m 5 -X POST "$REPORT_URL" \
+  ( ( code="$(curl -sS -m 5 -o /dev/null -w '%{http_code}' -X POST "$REPORT_URL" \
         -H @- -H "Content-Type: application/json" \
-        --data-binary @"$pf" <<<"x-api-key: $token" >/dev/null 2>&1; rm -f "$pf" ) & ) 2>/dev/null || true
+        --data-binary @"$pf" <<<"x-api-key: $token" 2>/dev/null)"; rm -f "$pf"
+      dbg "$event: sent ${2:-event} -> HTTP ${code:-none}" ) & ) 2>/dev/null || true
 }
 
 # Transcript parse -> token windows + flags, in one pass. Run lazily (only once we know
@@ -286,7 +297,7 @@ if [ "$label" = "baseline" ]; then
         (if $contam == "true" then {contaminated: "true"}    else {} end)
       )
     }' 2>/dev/null)"
-  post "$payload"
+  post "$payload" "baseline beacon"
   printf '%s\n' "$key" >> "$state" 2>/dev/null || true
   exit 0
 fi
@@ -295,14 +306,14 @@ fi
 # (GATE 1 — skill actually ran — was already checked in the cheap fast-exit block above.)
 # Don't lock in a repo-less event (needs repo_url to join to the PR). Mark this verdict
 # count seen only after that, so a Stop before the repo resolves retries on the next Stop.
-[ -n "$repo_url" ] || exit 0
+[ -n "$repo_url" ] || { dbg "$event: skip: no git remote resolved (cwd ${cwd:-?})"; exit 0; }
 [ "$event" = "Stop" ] && [ -n "${vseen:-}" ] && { printf '%s' "$vcount" > "$vseen" 2>/dev/null || true; }
 
 # GATE 2 — a real assistant-authored verdict line exists, as text or as the hold's
 # `printf` Bash call (grep, not python, so it still works without python3).
 verdicts="$(jq -r 'select(.message.role? == "assistant") | .message.content? // [] | .[]? | if .type? == "text" then .text? // empty elif .type? == "tool_use" and .name? == "Bash" and ((.input.command? // "") | test("(^|\\n|;|&&)\\s*printf\\s[^\\n]*LinearB: ")) then .input.command else empty end' "$transcript" 2>/dev/null \
   | grep -E 'LinearB: .+ (LOW|MEDIUM|HIGH) effort' || true)"
-[ -n "$verdicts" ] || exit 0
+[ -n "$verdicts" ] || { dbg "$event: skip: skill ran but no verdict line yet"; exit 0; }
 
 re='LinearB: (.+) (LOW|MEDIUM|HIGH) effort'
 er='\(([^\)]*)\)'
@@ -358,7 +369,7 @@ report_decisions() {
         )
       }' 2>/dev/null)"
     [ -n "$payload" ] || continue
-    post "$payload"
+    post "$payload" "decision $veffort ($vrepo)${backfill:+ backfill}"
     printf '%s\n' "$key" >> "$state" 2>/dev/null || true
   done <<< "$verdicts"
 }
@@ -399,6 +410,6 @@ payload="$(jq -n \
     )
   }' 2>/dev/null)"
 [ -n "$payload" ] || exit 0
-post "$payload"
+post "$payload" "tokens $veffort ($vrepo)"
 printf '%s\n' "$key" >> "$state" 2>/dev/null || true
 exit 0
