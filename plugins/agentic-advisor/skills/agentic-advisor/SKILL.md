@@ -49,7 +49,7 @@ Two checks that prevent wasted work — do them before any LinearB call:
   f="${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor/verdicts/$h.json"   # private per-user dir, not shared /tmp
   cat "$f" 2>/dev/null   # read BEFORE any LinearB call
   ```
-  - **On a hit** (file exists, **is owned by you** — check `[ -O "$f" ]` and ignore it otherwise, since a cache file someone else wrote could fake a LOW grade — AND `computed_at` is within the last 24h — or the file's mtime is <24h old): **skip ALL LinearB API calls** (repo list, measurements, incidents/search) and reuse `repo_effort`/`repo_evidence` **as the repo-health axis only**. You MUST still grade **task-complexity and change-area (files) fresh for the current task**, then combine — the cache replaces the phase-1 *data*, NOT the final verdict. Note it — **keep the standard `… <EFFORT> effort (…)` shape** (with the literal word `effort`) so the reporter still captures the decision: `LinearB: <repo> — <EFFORT> effort (repo-health cached <N>h ago; task + files fresh)`. (The ticket lookup under Task Complexity is per task, so it still runs on a hit.)
+  - **On a hit** (file exists, **is owned by you** — check `[ -O "$f" ]` and ignore it otherwise, since a cache file someone else wrote could fake a LOW grade — AND `computed_at` is within the last 24h — or the file's mtime is <24h old): **skip the repo-health LinearB calls** (repo list, measurements, incidents/search) and reuse `repo_effort`/`repo_evidence` **as the repo-health axis only**. You MUST still grade **task-complexity and change-area (files) fresh for the current task**, then combine — the cache replaces the phase-1 *data*, NOT the final verdict. Note it — **keep the standard `… <EFFORT> effort (…)` shape** (with the literal word `effort`) so the reporter still captures the decision: `LinearB: <repo> — <EFFORT> effort (repo-health cached <N>h ago; task + files fresh)`. (The ticket lookup under Task Complexity is per task, not repo health, so it still runs on a hit.)
   - **On a miss/stale:** compute the repo-health verdict fresh, then **write the cache atomically** (a per-process temp file then `mv` — atomic on the same filesystem, and the `$$` suffix means two concurrent sessions never share a temp file):
     ```text
     (umask 077; mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor/verdicts")
@@ -148,9 +148,10 @@ So also grade the **task itself** — from the prompt + your plan (plus the opti
 **Ticket context (optional, one call).** If the prompt or the current git branch contains a ticket key (e.g. `ABC-123`), fetch that ticket from LinearB's PM data and use it as extra evidence for this axis. It returns metadata only (no description), and only when the org has a PM integration connected:
 
 ```bash
-key="<ABC-123>"   # from the prompt, else: git -C "<cwd>" branch --show-current | grep -oE '[A-Za-z][A-Za-z0-9]+-[0-9]+' | head -1
+key='<ABC-123>'   # single quotes: a pasted key never expands. From the prompt, else: git -C "<cwd>" branch --show-current | grep -oE '[A-Za-z][A-Za-z0-9]+-[0-9]+' | head -1
 key="$(printf '%s' "$key" | tr '[:lower:]' '[:upper:]')"   # lookups are case-sensitive
-curl -fsS -m 15 "${AUTH[@]}" <<<"x-api-key: ${LINEARB_API_TOKEN}" "$LB/api/v1/pm/issues?issue_keys=$key&limit=1" \
+[[ "$key" =~ ^[A-Z][A-Z0-9]+-[0-9]+$ ]] || key=""            # only a strict ticket key reaches the command
+[ -n "$key" ] && curl -fsS -m 15 "${AUTH[@]}" <<<"x-api-key: ${LINEARB_API_TOKEN}" "$LB/api/v1/pm/issues?issue_keys=$key&limit=1" \
   | jq -c '.[0] // empty | {key: .provider_key, title, type: .issue_type, state: .issue_state,
            priority: ([.attributes.fields[]? | select(.id=="priority") | .value[0]][0]),
            points: .properties.story_points, labels: [.attributes.labels[]?.name]}'
@@ -158,7 +159,8 @@ curl -fsS -m 15 "${AUTH[@]}" <<<"x-api-key: ${LINEARB_API_TOKEN}" "$LB/api/v1/pm
 
 - **Raise, never lower.** Priority `Highest`/`Critical`/`Blocker`, or type `bug`/`incident`/`hotfix`, means the task is at least **MEDIUM**; a `Highest`/`Critical` bug or incident means **HIGH**. A large estimate (`points` >= 8) raises the task axis one notch. A `Low` priority or small estimate never lowers the grade below what the prompt and repo already show.
 - **Name it in the verdict** when it drove the grade, e.g. `… HIGH effort (repo calm — rework 1.2% — but ticket ABC-123: Highest-priority bug)`.
-- **Empty output, a failed call, or no key → ignore it** and grade the task from the prompt as usual. Never block, and don't retry.
+- **Labels:** a `security`, `incident`, `hotfix`, `migration` or `breaking` label means the task is at least **MEDIUM**; any other label is context only.
+- **HTTP 401/403 → the token rule in Access applies** (grade MEDIUM, tell the user to refresh `LINEARB_API_TOKEN`), even on a cache hit, where this may be the only call. **Empty output, any other failure, or no key → ignore it** and grade the task from the prompt as usual. Never block, and don't retry.
 
 Same LOW/MEDIUM/HIGH scale: **LOW** = small, localized, well-specified, little logic; **MEDIUM** = a normal feature/fix (several files, real logic, a few edge cases); **HIGH** = large, cross-cutting, multi-repo, tricky, ambiguous, or high blast-radius.
 
