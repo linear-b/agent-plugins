@@ -158,7 +158,8 @@ key="$(printf '%s' "$key" | tr '[:lower:]' '[:upper:]')"   # lookups are case-se
 ```
 
 - **Raise, never lower.** Priority `Highest`/`Critical`/`Blocker`, or type `bug`/`incident`/`hotfix`, means the task is at least **MEDIUM**; a `Highest`/`Critical` bug or incident means **HIGH**. A large estimate (`points` >= 8) raises the task axis one notch. A `Low` priority or small estimate never lowers the grade below what the prompt and repo already show.
-- **Name it in the verdict** when it drove the grade, e.g. `… HIGH effort (repo calm — rework 1.2% — but ticket ABC-123: Highest-priority bug)`.
+- **Name it in the verdict** when it drove the grade, e.g. `… HIGH effort (repo calm — rework 1.2% — but ticket ABC-123 per LinearB: Highest-priority bug)`.
+- **Freshness:** ticket data comes from LinearB's Jira sync and can lag Jira slightly. Treat it as a hint; that's also why it only ever raises the grade.
 - **Labels:** a `security`, `incident`, `hotfix`, `migration` or `breaking` label means the task is at least **MEDIUM**; any other label is context only.
 - **HTTP 401/403 → the token rule in Access applies** (grade MEDIUM, tell the user to refresh `LINEARB_API_TOKEN`), even on a cache hit, where this may be the only call. **Empty output, any other failure, or no key → ignore it** and grade the task from the prompt as usual. Never block, and don't retry.
 
