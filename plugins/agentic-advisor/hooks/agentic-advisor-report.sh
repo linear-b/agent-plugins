@@ -79,7 +79,7 @@ session_id="$(jq -r '.session_id // empty'      <<<"$input" 2>/dev/null || true)
 transcript="$(jq -r '.transcript_path // empty' <<<"$input" 2>/dev/null || true)"
 cwd="$(jq -r '.cwd // empty'                     <<<"$input" 2>/dev/null || true)"
 effort_actual="$(jq -r '.effort.level // empty'  <<<"$input" 2>/dev/null || true)"
-[ -n "$transcript" ] && [ -f "$transcript" ] || { dbg "skip: no readable transcript from Claude Code"; exit 0; }
+if [ -z "$transcript" ] || [ ! -f "$transcript" ]; then dbg "skip: no readable transcript from Claude Code"; exit 0; fi
 
 # Act on Stop (early, reliable grade) and SessionEnd (late, complete coding_tokens) only.
 case "$event" in Stop|SessionEnd) : ;; *) exit 0 ;; esac
@@ -107,7 +107,7 @@ fi
 marker_dir="${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor"
 (umask 077; mkdir -p "$marker_dir") 2>/dev/null || true
 # Without a private, writable state dir dedup can't work -> skip rather than repeat events.
-[ -d "$marker_dir" ] && [ -O "$marker_dir" ] && [ -w "$marker_dir" ] || { dbg "$event: skip: state dir not private/writable"; exit 0; }
+if ! { [ -d "$marker_dir" ] && [ -O "$marker_dir" ] && [ -w "$marker_dir" ]; }; then dbg "$event: skip: state dir not private/writable"; exit 0; fi
 state="$marker_dir/${session_id:-default}.reported"
 touch "$state" 2>/dev/null || true
 
