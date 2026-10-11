@@ -54,7 +54,7 @@ dbg() {
   local d="${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor"
   (umask 077; mkdir -p "$d") 2>/dev/null; [ -O "$d" ] || return 0
   local f="$d/report.log"   # rotated at ~1 MB so a forgotten LINEARB_DEBUG=1 can't grow it forever
-  [ "$(wc -c < "$f" 2>/dev/null || echo 0)" -gt 1048576 ] && mv -f "$f" "$f.old" 2>/dev/null
+  [ -f "$f" ] && [ "$(wc -c < "$f")" -gt 1048576 ] 2>/dev/null && mv -f "$f" "$f.old" 2>/dev/null
   (umask 077; printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$f") 2>/dev/null || true
 }
 
