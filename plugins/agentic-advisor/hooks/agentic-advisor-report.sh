@@ -40,7 +40,7 @@
 # Env: LINEARB_API_TOKEN — required to report; without it this is a silent no-op.
 #      LINEARB_TELEMETRY — set to 0 (or false/off/no) to disable reporting.
 #      LINEARB_DEBUG — set to 1 to log each outcome (skip reason or HTTP status) to
-#      ~/.cache/agentic-advisor/report.log. Never logs the token, email or payload.
+#      ${XDG_CACHE_HOME:-~/.cache}/agentic-advisor/report.log. Never logs the token, email or payload.
 #      LINEARB_API_URL — API base URL (default https://public-api.linearb.io); set it
 #      for on-prem or regional LinearB deployments.
 #      LINEARB_BASELINE_HOLDOUT_PCT (default 0 — disabled) — % of sessions withheld as a no-grade
@@ -53,7 +53,9 @@ dbg() {
   [ "${LINEARB_DEBUG:-}" = "1" ] || return 0
   local d="${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor"
   (umask 077; mkdir -p "$d") 2>/dev/null; [ -O "$d" ] || return 0
-  (umask 077; printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$d/report.log") 2>/dev/null || true
+  local f="$d/report.log"   # rotated at ~1 MB so a forgotten LINEARB_DEBUG=1 can't grow it forever
+  [ "$(wc -c < "$f" 2>/dev/null || echo 0)" -gt 1048576 ] && mv -f "$f" "$f.old" 2>/dev/null
+  (umask 077; printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$f") 2>/dev/null || true
 }
 
 API_URL="${LINEARB_API_URL:-https://public-api.linearb.io}"
@@ -77,7 +79,7 @@ session_id="$(jq -r '.session_id // empty'      <<<"$input" 2>/dev/null || true)
 transcript="$(jq -r '.transcript_path // empty' <<<"$input" 2>/dev/null || true)"
 cwd="$(jq -r '.cwd // empty'                     <<<"$input" 2>/dev/null || true)"
 effort_actual="$(jq -r '.effort.level // empty'  <<<"$input" 2>/dev/null || true)"
-[ -n "$transcript" ] && [ -f "$transcript" ] || exit 0
+[ -n "$transcript" ] && [ -f "$transcript" ] || { dbg "skip: no readable transcript from Claude Code"; exit 0; }
 
 # Act on Stop (early, reliable grade) and SessionEnd (late, complete coding_tokens) only.
 case "$event" in Stop|SessionEnd) : ;; *) exit 0 ;; esac
@@ -99,13 +101,13 @@ fi
 # The baseline beacon needs the whole-session coding_tokens and has no verdict to
 # report early, so it only makes sense at SessionEnd. On Stop, a baseline session has
 # nothing to say (the skill was withheld) -> bail early.
-[ "$label" = "baseline" ] && [ "$event" != "SessionEnd" ] && exit 0
+[ "$label" = "baseline" ] && [ "$event" != "SessionEnd" ] && { dbg "$event: skip: baseline (holdout) session reports only at SessionEnd"; exit 0; }
 
 # Per-user state dir (not shared /tmp): another local user can't plant or read markers.
 marker_dir="${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor"
 (umask 077; mkdir -p "$marker_dir") 2>/dev/null || true
 # Without a private, writable state dir dedup can't work -> skip rather than repeat events.
-[ -d "$marker_dir" ] && [ -O "$marker_dir" ] && [ -w "$marker_dir" ] || exit 0
+[ -d "$marker_dir" ] && [ -O "$marker_dir" ] && [ -w "$marker_dir" ] || { dbg "$event: skip: state dir not private/writable"; exit 0; }
 state="$marker_dir/${session_id:-default}.reported"
 touch "$state" 2>/dev/null || true
 
@@ -113,14 +115,14 @@ touch "$state" 2>/dev/null || true
 # per-turn Stop that has nothing new to report costs only a grep or two, not a full
 # transcript parse. (The whole graded path requires the skill to have actually run.)
 if [ "$label" = "graded" ]; then
-  grep -qE '"skill"[[:space:]]*:[[:space:]]*"[^"]*agentic-advisor[^"]*"' "$transcript" 2>/dev/null || exit 0
+  grep -qE '"skill"[[:space:]]*:[[:space:]]*"[^"]*agentic-advisor[^"]*"' "$transcript" 2>/dev/null || { dbg "$event: skip: skill has not run in this session"; exit 0; }
   if [ "$event" = "Stop" ]; then
     # Has the set of verdict lines changed since we last processed a Stop? SKILL.md
     # example lines are constant, so this count only rises on a real new verdict (incl.
     # a phase-2 re-emit). Unchanged -> nothing to do -> skip the O(n) scrape + resolution.
     vcount="$(grep -cE 'LinearB: .+ (LOW|MEDIUM|HIGH) effort' "$transcript" 2>/dev/null)"; vcount="${vcount:-0}"
     vseen="$marker_dir/${session_id:-default}.vseen"
-    [ -f "$vseen" ] && [ "$(cat "$vseen" 2>/dev/null)" = "$vcount" ] && exit 0
+    [ -f "$vseen" ] && [ "$(cat "$vseen" 2>/dev/null)" = "$vcount" ] && { dbg "Stop: skip: no new verdict since last report"; exit 0; }
   fi
 fi
 
@@ -264,10 +266,10 @@ PY
 # ---- baseline path (SessionEnd only): coding_tokens beacon, no grade ----
 if [ "$label" = "baseline" ]; then
   parse_tokens
-  [ "$has_edit" = "true" ] || exit 0        # only real code sessions
-  [ -n "$repo_url" ] || exit 0
+  [ "$has_edit" = "true" ] || { dbg "SessionEnd: skip: baseline session made no code edit"; exit 0; }
+  [ -n "$repo_url" ] || { dbg "SessionEnd: skip: baseline session, no git remote resolved"; exit 0; }
   key="$(printf 'baseline|%s' "$repo_url" | sha1)"
-  [ -n "$key" ] && grep -q "$key" "$state" 2>/dev/null && exit 0
+  [ -n "$key" ] && grep -q "$key" "$state" 2>/dev/null && { dbg "SessionEnd: skip: baseline beacon already sent"; exit 0; }
   repo="$(basename "$repo_url" .git 2>/dev/null || true)"
   # Contamination check: in a baseline session the trigger stays silent, so the skill
   # should never run. If it ran anyway (grep finds a real Skill invocation), flag it —
@@ -306,7 +308,7 @@ fi
 # (GATE 1 — skill actually ran — was already checked in the cheap fast-exit block above.)
 # Don't lock in a repo-less event (needs repo_url to join to the PR). Mark this verdict
 # count seen only after that, so a Stop before the repo resolves retries on the next Stop.
-[ -n "$repo_url" ] || { dbg "$event: skip: no git remote resolved (cwd ${cwd:-?})"; exit 0; }
+[ -n "$repo_url" ] || { dbg "$event: skip: no git remote resolved from the session folder"; exit 0; }
 [ "$event" = "Stop" ] && [ -n "${vseen:-}" ] && { printf '%s' "$vcount" > "$vseen" 2>/dev/null || true; }
 
 # GATE 2 — a real assistant-authored verdict line exists, as text or as the hold's
@@ -338,7 +340,7 @@ report_decisions() {
     [ -n "$line" ] || continue
     parse_verdict "$line" || continue
     key="$(printf 'decision|%s|%s' "$vrepo" "$veffort" | sha1)"
-    [ -n "$key" ] && grep -q "$key" "$state" 2>/dev/null && continue
+    [ -n "$key" ] && grep -q "$key" "$state" 2>/dev/null && { dbg "$event: skip: decision $veffort ($vrepo) already sent"; continue; }
     parse_tokens   # only now (something new to report) — keeps quiet turns cheap
     val="$(effort_val "$veffort")"
     payload="$(jq -n \
@@ -384,9 +386,9 @@ last_verdict="$(printf '%s\n' "$verdicts" | grep -E 'LinearB: .+ (LOW|MEDIUM|HIG
 [ -n "$last_verdict" ] || exit 0
 parse_verdict "$last_verdict" || exit 0
 key="$(printf 'tokens|%s|%s' "$vrepo" "$veffort" | sha1)"
-[ -n "$key" ] && grep -q "$key" "$state" 2>/dev/null && exit 0
+[ -n "$key" ] && grep -q "$key" "$state" 2>/dev/null && { dbg "SessionEnd: skip: tokens event already sent"; exit 0; }
 parse_tokens
-[ -n "$coding_tokens" ] || exit 0   # nothing to add without the measurement
+[ -n "$coding_tokens" ] || { dbg "SessionEnd: skip: no coding_tokens (python3 missing?)"; exit 0; }   # nothing to add without the measurement
 payload="$(jq -n \
   --arg m "$METRIC_NAME" --arg src "$SOURCE" --argjson ts "$ts" \
   --arg effort "$veffort" --arg repo "$vrepo" \

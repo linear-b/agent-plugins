@@ -86,4 +86,4 @@ Then **launch Claude Code from a shell that has it exported** (hooks and the ski
 
 ## Troubleshooting
 
-Reporting is silent by design, so a missing event shows no error. To see what happened, `export LINEARB_DEBUG=1`, relaunch Claude Code, run one code task, and check `~/.cache/agentic-advisor/report.log`. Each line gives the outcome: a skip reason (for example `LINEARB_API_TOKEN not set in this session`) or the HTTP status of a sent event (`200` = recorded, `401`/`403` = bad token, `422` = rejected payload). The log never contains your token, email or the payload.
+Reporting is silent by design, so a missing event shows no error. To see what happened, `export LINEARB_DEBUG=1`, relaunch Claude Code, run one code task, and check `${XDG_CACHE_HOME:-~/.cache}/agentic-advisor/report.log` (rotated to `report.log.old` at 1 MB). Each line gives the outcome: a skip reason (for example `LINEARB_API_TOKEN not set in this session`) or the HTTP status of a sent event (`200` = recorded, `401`/`403` = bad token, `422` = rejected payload). The log never contains your token, email or the payload.
