@@ -145,7 +145,7 @@ So also grade the **task itself** — from the prompt + your plan (plus the opti
 - **Ambiguity/constraints** — vague requirements, many edge cases, backward-compat / performance / security constraints.
 - **Blast radius** — touching shared/foundational code many things depend on.
 
-**Ticket context (optional, one call).** If the prompt or the current git branch contains a ticket key (e.g. `ABC-123`), fetch that ticket from LinearB's PM data and use it as extra evidence for this axis. It returns metadata only (no description), and only when the org has a PM integration connected:
+**Ticket context (optional, one call).** If the prompt or the current git branch contains a ticket key (e.g. `ABC-123`), fetch that ticket from LinearB's PM data and use it as extra evidence for this axis. **Run it as part of the sweep, together with the repo-health calls (or right after a cache hit), before printing the verdict**, so the ticket is already in the grade the verdict line states. It returns metadata only (no description), and only when the org has a PM integration connected:
 
 ```bash
 key='<ABC-123>'   # single quotes: a pasted key never expands. From the prompt, else: git -C "<cwd>" branch --show-current | grep -oE '[A-Za-z][A-Za-z0-9]+-[0-9]+' | head -1
@@ -278,7 +278,7 @@ HIGH effort — repo looks fragile, be careful:
 
 ## Human-Facing Note
 
-The moment the **repo sweep** returns — and **before any other tool call, and before spawning any Explore/subagent, reading, searching, `ls`/`find`, or editing code** — your next output MUST be this exact verdict line, **formatted as a markdown blockquote** (start it with `> ` so the terminal renders it with the left bar / emphasis and it stands out). Emit it as assistant text — do NOT wrap it in an `echo`/shell command or code fence (that hides it in a collapsed tool block). The one exception is the exact `printf '%s\n' '> LinearB: …'` Bash call from the Output contract, when you aren't writing visible text or the hook asks for it. Do not paraphrase it into prose like "LOW effort signals confirmed". This is the **repo-level verdict**; it is fully knowable from the sweep alone, so nothing else may happen first. Format:
+The moment the **repo sweep** (including the ticket lookup, if any) returns — and **before any other tool call, and before spawning any Explore/subagent, reading, searching, `ls`/`find`, or editing code** — your next output MUST be this exact verdict line, **formatted as a markdown blockquote** (start it with `> ` so the terminal renders it with the left bar / emphasis and it stands out). Emit it as assistant text — do NOT wrap it in an `echo`/shell command or code fence (that hides it in a collapsed tool block). The one exception is the exact `printf '%s\n' '> LinearB: …'` Bash call from the Output contract, when you aren't writing visible text or the hook asks for it. Do not paraphrase it into prose like "LOW effort signals confirmed". This is the **repo-level verdict**; it is fully knowable from the sweep alone, so nothing else may happen first. Format:
 
 ```text
 > LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <what you will do differently>
