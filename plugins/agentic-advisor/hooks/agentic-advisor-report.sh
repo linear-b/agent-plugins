@@ -39,8 +39,9 @@
 #
 # Env: LINEARB_API_TOKEN — required to report; without it this is a silent no-op.
 #      LINEARB_TELEMETRY — set to 0 (or false/off/no) to disable reporting.
-#      LINEARB_DEBUG — set to 1 to log each outcome (skip reason or HTTP status) to
-#      ${XDG_CACHE_HOME:-~/.cache}/agentic-advisor/report.log. Never logs the token, email or payload.
+#      LINEARB_DEBUG — set to 1 to log each outcome (skip reason or HTTP status, with the
+#      grade and repo name) to ${XDG_CACHE_HOME:-~/.cache}/agentic-advisor/report.log. Never logs the token,
+#      email, prompt or payload.
 #      LINEARB_API_URL — API base URL (default https://public-api.linearb.io); set it
 #      for on-prem or regional LinearB deployments.
 #      LINEARB_BASELINE_HOLDOUT_PCT (default 0 — disabled) — % of sessions withheld as a no-grade
@@ -51,11 +52,17 @@ set -uo pipefail
 # Opt-in troubleshooting log (LINEARB_DEBUG=1): one line per outcome, no secrets or payloads.
 dbg() {
   [ "${LINEARB_DEBUG:-}" = "1" ] || return 0
-  local d="${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor"
-  (umask 077; mkdir -p "$d") 2>/dev/null; [ -O "$d" ] || return 0
-  local f="$d/report.log"   # rotated at ~1 MB so a forgotten LINEARB_DEBUG=1 can't grow it forever
+  [ -n "${XDG_CACHE_HOME:-}${HOME:-}" ] || return 0
+  local d="${XDG_CACHE_HOME:-${HOME:-}/.cache}/agentic-advisor" f
+  (umask 077; mkdir -p "$d") 2>/dev/null
+  # Private on every write, not only on creation: owned real dir 0700, never a symlinked/foreign log.
+  if [ -L "$d" ] || [ ! -d "$d" ] || [ ! -O "$d" ]; then return 0; fi
+  chmod 700 "$d" 2>/dev/null
+  f="$d/report.log"   # rotated at ~1 MB so a forgotten LINEARB_DEBUG=1 can't grow it forever
+  if [ -L "$f" ] || { [ -e "$f" ] && [ ! -O "$f" ]; }; then return 0; fi
   [ -f "$f" ] && [ "$(wc -c < "$f")" -gt 1048576 ] 2>/dev/null && mv -f "$f" "$f.old" 2>/dev/null
   (umask 077; printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$f") 2>/dev/null || true
+  chmod 600 "$f" 2>/dev/null || true
 }
 
 API_URL="${LINEARB_API_URL:-https://public-api.linearb.io}"
@@ -104,7 +111,7 @@ fi
 [ "$label" = "baseline" ] && [ "$event" != "SessionEnd" ] && { dbg "$event: skip: baseline (holdout) session reports only at SessionEnd"; exit 0; }
 
 # Per-user state dir (not shared /tmp): another local user can't plant or read markers.
-marker_dir="${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor"
+marker_dir="${XDG_CACHE_HOME:-${HOME:-}/.cache}/agentic-advisor"
 (umask 077; mkdir -p "$marker_dir") 2>/dev/null || true
 # Without a private, writable state dir dedup can't work -> skip rather than repeat events.
 if ! { [ -d "$marker_dir" ] && [ -O "$marker_dir" ] && [ -w "$marker_dir" ]; }; then dbg "$event: skip: state dir not private/writable"; exit 0; fi
@@ -139,7 +146,7 @@ case "$email" in *@*) identity_source="git" ;; *) email=""; identity_source="non
 # Fallback: the signed-in Claude Code account, for machines with no git identity.
 # ~/.claude.json is an undocumented file, so a missing/odd one is simply skipped.
 if [ -z "$email" ]; then
-  email="$(jq -r '.oauthAccount.emailAddress // empty' "${CLAUDE_CONFIG_DIR:-$HOME}/.claude.json" 2>/dev/null || true)"
+  email="$(jq -r '.oauthAccount.emailAddress // empty' "${CLAUDE_CONFIG_DIR:-${HOME:-}}/.claude.json" 2>/dev/null || true)"
   case "$email" in *@*) identity_source="claude_account" ;; *) email="" ;; esac
 fi
 

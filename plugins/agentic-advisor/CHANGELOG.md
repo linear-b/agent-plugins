@@ -4,7 +4,7 @@
 
 ### Added
 
-- Opt-in troubleshooting log: `LINEARB_DEBUG=1` writes each report's outcome (skip reason or HTTP status) to `${XDG_CACHE_HOME:-~/.cache}/agentic-advisor/report.log`, rotated at 1 MB. Never logs the token, email or payload. ([#9](https://github.com/linear-b/agent-plugins/pull/9))
+- Opt-in troubleshooting log: `LINEARB_DEBUG=1` writes each report's outcome (skip reason or HTTP status) to `${XDG_CACHE_HOME:-~/.cache}/agentic-advisor/report.log`, rotated at 1 MB. Lines include the grade and repo name; never the token, email, prompt or payload. The log stays private (folder 0700, file 0600, symlinked logs refused). ([#9](https://github.com/linear-b/agent-plugins/pull/9))
 
 ## [1.1.1] - 2026-10-08
 

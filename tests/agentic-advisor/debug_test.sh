@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# LINEARB_DEBUG tests: pipe hook payloads into the reporter with a stubbed curl and check report.log.
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+REPORT="$ROOT/plugins/agentic-advisor/hooks/agentic-advisor-report.sh"
+
+pass=0; fail=0
+check() {
+  local name=$1; shift
+  if "$@"; then pass=$((pass+1)); printf 'ok   %s\n' "$name"; else fail=$((fail+1)); printf 'FAIL %s\n' "$name"; fi
+}
+mode() { stat -f %Lp "$1" 2>/dev/null || stat -c %a "$1"; }
+
+# Shared fixtures: a git repo with a remote, a stub curl that prints $STUB_CODE for -w, a transcript
+# with a skill run, a verdict and a code edit.
+W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT
+mkdir -p "$W/bin"
+cat > "$W/bin/curl" <<'STUB'
+#!/usr/bin/env bash
+w=0; while [ $# -gt 0 ]; do case "$1" in -w) w=1; shift ;; esac; shift; done
+cat >/dev/null
+[ "$w" = 1 ] && printf '%s' "${STUB_CODE:-200}"
+exit 0
+STUB
+chmod +x "$W/bin/curl"
+REPO="$W/repo"
+git init -q "$REPO"
+git -C "$REPO" config user.email secret.person@example.com
+git -C "$REPO" remote add origin git@github.com:acme/widgets.git
+TRANSCRIPT="$W/transcript.jsonl"
+line() { jq -nc --arg t "$1" --argjson c "$2" --argjson o "$3" '{timestamp:$t,message:{role:"assistant",model:"m",content:$c,usage:{output_tokens:$o}}}'; }
+{
+  line 2026-10-11T10:00:00.000Z '[{"type":"tool_use","name":"Skill","input":{"skill":"agentic-advisor"}}]' 50
+  line 2026-10-11T10:00:30.000Z '[{"type":"text","text":"> LinearB: widgets — HIGH effort (rework 8%) — careful."}]' 400
+  line 2026-10-11T10:02:00.000Z "$(jq -nc --arg f "$REPO/a.py" '[{type:"tool_use",name:"Edit",input:{file_path:$f}}]')" 1200
+} > "$TRANSCRIPT"
+
+# run <home> <event> [VAR=value ...] — isolated home/cache, no inherited LinearB env.
+run() {
+  local h=$1 ev=$2; shift 2
+  mkdir -p "$h"
+  printf '{"hook_event_name":"%s","session_id":"s-%s","transcript_path":"%s","cwd":"%s"}' \
+    "$ev" "$(basename "$h")" "$TRANSCRIPT" "$REPO" \
+  | env -u LINEARB_API_TOKEN -u LINEARB_DEBUG -u LINEARB_TELEMETRY -u LB_PLUGIN_REPORT_METRICS_TOKEN \
+      HOME="$h" XDG_CACHE_HOME="$h/.cache" XDG_CONFIG_HOME="$h" GIT_CONFIG_NOSYSTEM=1 PATH="$W/bin:$PATH" \
+      "$@" bash "$REPORT" 2>"$h/stderr"
+  for _ in $(seq 20); do grep -q 'HTTP' "$h/.cache/agentic-advisor/report.log" 2>/dev/null && break; [ "$ev" = Stop ] || break; sleep 0.2; done
+  sleep 0.5   # detached post() writes its line after the hook returns
+}
+LOG() { cat "$1/.cache/agentic-advisor/report.log" 2>/dev/null; }
+has() { LOG "$1" | grep -qF -- "$2"; }
+
+H="$W/off"; run "$H" Stop LINEARB_API_TOKEN=test-token
+check "debug off by default: no log" test ! -e "$H/.cache/agentic-advisor/report.log"
+
+H="$W/notoken"; run "$H" Stop LINEARB_DEBUG=1
+check "no token: reason logged" has "$H" "skip: LINEARB_API_TOKEN not set"
+
+H="$W/telemetryoff"; run "$H" Stop LINEARB_DEBUG=1 LINEARB_API_TOKEN=test-token LINEARB_TELEMETRY=0
+check "telemetry off: reason logged" has "$H" "skip: LINEARB_TELEMETRY is off"
+
+H="$W/sent"; run "$H" Stop LINEARB_DEBUG=1 LINEARB_API_TOKEN=test-token
+run "$H" Stop LINEARB_DEBUG=1 LINEARB_API_TOKEN=test-token
+run "$H" SessionEnd LINEARB_DEBUG=1 LINEARB_API_TOKEN=test-token
+check "decision sent: HTTP 200 logged" has "$H" "Stop: sent decision HIGH (widgets) -> HTTP 200"
+check "repeat Stop: 'no new verdict' logged" has "$H" "skip: no new verdict since last report"
+check "tokens sent at SessionEnd: HTTP 200 logged" has "$H" "SessionEnd: sent tokens HIGH (widgets) -> HTTP 200"
+check "log never has the token" bash -c "! grep -q test-token '$H/.cache/agentic-advisor/report.log'"
+check "log never has the email" bash -c "! grep -q secret.person '$H/.cache/agentic-advisor/report.log'"
+check "log never has the session folder path" bash -c "! grep -qF '$REPO' '$H/.cache/agentic-advisor/report.log'"
+check "log file is 0600" test "$(mode "$H/.cache/agentic-advisor/report.log")" = 600
+
+H="$W/rejected"; run "$H" SessionEnd LINEARB_DEBUG=1 LINEARB_API_TOKEN=test-token STUB_CODE=401
+check "rejected token: HTTP 401 logged (backfilled decision)" has "$H" "SessionEnd: sent decision HIGH (widgets) backfill -> HTTP 401"
+
+H="$W/rotate"; mkdir -p "$H/.cache/agentic-advisor"
+(umask 077; head -c 1100000 /dev/zero | tr '\0' x > "$H/.cache/agentic-advisor/report.log")
+run "$H" Stop LINEARB_DEBUG=1 LINEARB_API_TOKEN=test-token
+check "log rotates past 1 MB (old kept)" test -f "$H/.cache/agentic-advisor/report.log.old"
+check "log rotates past 1 MB (new is small)" test "$(wc -c < "$H/.cache/agentic-advisor/report.log")" -lt 1000
+
+H="$W/quiet"; run "$H" Stop LINEARB_DEBUG=1
+check "first debug write prints nothing to stderr" test ! -s "$H/stderr"
+
+H="$W/loose"; mkdir -p "$H/.cache/agentic-advisor"; chmod 755 "$H/.cache/agentic-advisor"
+: > "$H/.cache/agentic-advisor/report.log"; chmod 644 "$H/.cache/agentic-advisor/report.log"
+run "$H" Stop LINEARB_DEBUG=1
+check "existing 0644 log tightened to 0600" test "$(mode "$H/.cache/agentic-advisor/report.log")" = 600
+check "existing 0755 dir tightened to 0700" test "$(mode "$H/.cache/agentic-advisor")" = 700
+
+H="$W/symlink"; mkdir -p "$H/.cache/agentic-advisor"; : > "$W/elsewhere"
+ln -s "$W/elsewhere" "$H/.cache/agentic-advisor/report.log"
+run "$H" Stop LINEARB_DEBUG=1
+check "symlinked log is not written through" test ! -s "$W/elsewhere"
+
+printf '{"hook_event_name":"Stop","session_id":"nohome","transcript_path":"%s","cwd":"%s"}' "$TRANSCRIPT" "$REPO" \
+  | env -u HOME -u XDG_CACHE_HOME -u LINEARB_API_TOKEN -u LB_PLUGIN_REPORT_METRICS_TOKEN LINEARB_DEBUG=1 bash "$REPORT" 2>/dev/null
+check "HOME and XDG_CACHE_HOME unset: hook still exits 0" test $? -eq 0
+
+echo "$pass passed, $fail failed"
+[ "$fail" -eq 0 ]
