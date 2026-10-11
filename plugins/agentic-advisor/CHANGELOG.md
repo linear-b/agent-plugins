@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.0] - 2026-10-11
+
+### Added
+
+- Ticket context: when the prompt or branch names a ticket (e.g. `ABC-123`), the skill fetches its type, priority, estimate and labels from LinearB (one call, same token) and uses them to raise the task-complexity grade, e.g. a Highest-priority bug. Skipped silently when there's no key or no PM integration. ([#10](https://github.com/linear-b/agent-plugins/pull/10))
+
 ## [1.1.2] - 2026-10-11
 
 ### Added
