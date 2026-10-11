@@ -10,7 +10,7 @@ check() {
   local name=$1; shift
   if "$@"; then pass=$((pass+1)); printf 'ok   %s\n' "$name"; else fail=$((fail+1)); printf 'FAIL %s\n' "$name"; fi
 }
-mode() { stat -f %Lp "$1" 2>/dev/null || stat -c %a "$1"; }
+mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }   # GNU first: on Linux `stat -f` means filesystem info
 
 # Shared fixtures: a git repo with a remote, a stub curl that prints $STUB_CODE for -w, a transcript
 # with a skill run, a verdict and a code edit.
@@ -88,6 +88,11 @@ H="$W/loose"; mkdir -p "$H/.cache/agentic-advisor"; chmod 755 "$H/.cache/agentic
 run "$H" Stop LINEARB_DEBUG=1
 check "existing 0644 log tightened to 0600" test "$(mode "$H/.cache/agentic-advisor/report.log")" = 600
 check "existing 0755 dir tightened to 0700" test "$(mode "$H/.cache/agentic-advisor")" = 700
+
+H="$W/bigloose"; mkdir -p "$H/.cache/agentic-advisor"
+head -c 1100000 /dev/zero | tr '\0' x > "$H/.cache/agentic-advisor/report.log"; chmod 644 "$H/.cache/agentic-advisor/report.log"
+run "$H" Stop LINEARB_DEBUG=1
+check "oversized 0644 log is rotated to a 0600 .old" test "$(mode "$H/.cache/agentic-advisor/report.log.old")" = 600
 
 H="$W/symlink"; mkdir -p "$H/.cache/agentic-advisor"; : > "$W/elsewhere"
 ln -s "$W/elsewhere" "$H/.cache/agentic-advisor/report.log"

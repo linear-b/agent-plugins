@@ -34,7 +34,7 @@ set -o pipefail   # with curl -f, a failed request fails the whole pipeline inst
 
 **A failed call is not an empty result.** With `-f`, any HTTP 4xx/5xx or timeout makes `curl` exit non-zero (e.g. `curl: (22) The requested URL returned error: 401`). Treat that signal as **unavailable** — a failed repositories call is not "repo not found", a failed measurements call is not "dormant" — and **never grade LOW from missing data.** **HTTP 401/403 means the token is invalid or expired:** stop calling, grade **MEDIUM (signals unavailable)**, and tell the user to refresh `LINEARB_API_TOKEN`.
 
-**Token gate:** if `LINEARB_API_TOKEN` is empty, do **not** call — grade **MEDIUM** (signals unavailable), print the verdict, and continue. Never block the task. The same token authenticates both these reads and the optional reporter hook. On any timeout or non-2xx, treat that one signal as unavailable rather than failing the task.
+**Token gate:** if `LINEARB_API_TOKEN` is empty, do **not** call — grade **MEDIUM** with the evidence `LINEARB_API_TOKEN not set`, print the verdict, then tell the user in one plain sentence that LinearB signals and usage reporting stay off until they export `LINEARB_API_TOKEN` in the shell they start Claude Code from and restart it (see the plugin README). Then continue. Never block the task. The same token authenticates both these reads and the optional reporter hook. On any timeout or non-2xx, treat that one signal as unavailable rather than failing the task.
 
 ## Before Gathering Signals (cheap exits)
 
@@ -281,13 +281,14 @@ Concrete examples (fill in the real repo name and actual figures):
 > LinearB: payments-service — MEDIUM effort (rework 2.2%, prod OOM incident ~3wk ago, resolved) — keeping the change focused with edge-case tests.
 > LinearB: data-pipeline — HIGH effort (rework 7.9%, NEEDS FOCUS tier) — smallest viable change, defensive guards + failure-mode tests.
 > LinearB: <repo> — MEDIUM effort (signals unavailable) — defaulting to regular coding.
+> LinearB: <repo> — MEDIUM effort (LINEARB_API_TOKEN not set — LinearB signals and usage reporting are off) — defaulting to regular coding.
 ```
 
 Keep this skill lightweight. Do not print a full report unless the user asks for one.
 
 ## Error Handling
 
-- **No `LINEARB_API_TOKEN`** → grade MEDIUM (signals unavailable), print the verdict, continue. Never block.
+- **No `LINEARB_API_TOKEN`** → grade MEDIUM, say `LINEARB_API_TOKEN not set` in the verdict, tell the user how to set it (one sentence), continue. Never block. Users otherwise mistake a silent MEDIUM for a working setup.
 - If the repositories list call times out or the repo isn't found → run org-level incidents only; don't block.
 - `POST /api/v1/incidents/search` can be slow → **retry once** before marking incidents unknown.
 - Only pass `repository_urls` with the exact `.git` URL — a mismatch can error rather than return empty.

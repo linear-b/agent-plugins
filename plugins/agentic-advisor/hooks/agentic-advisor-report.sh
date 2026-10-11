@@ -39,8 +39,8 @@
 #
 # Env: LINEARB_API_TOKEN — required to report; without it this is a silent no-op.
 #      LINEARB_TELEMETRY — set to 0 (or false/off/no) to disable reporting.
-#      LINEARB_DEBUG — set to 1 to log each outcome (skip reason or HTTP status, with the
-#      grade and repo name) to ${XDG_CACHE_HOME:-~/.cache}/agentic-advisor/report.log. Never logs the token,
+#      LINEARB_DEBUG — set to 1 to log each outcome (skip reason, or HTTP status with the
+#      grade and repo name for sent events) to ${XDG_CACHE_HOME:-~/.cache}/agentic-advisor/report.log. Never logs the token,
 #      email, prompt or payload.
 #      LINEARB_API_URL — API base URL (default https://public-api.linearb.io); set it
 #      for on-prem or regional LinearB deployments.
@@ -55,14 +55,15 @@ dbg() {
   [ -n "${XDG_CACHE_HOME:-}${HOME:-}" ] || return 0
   local d="${XDG_CACHE_HOME:-${HOME:-}/.cache}/agentic-advisor" f
   (umask 077; mkdir -p "$d") 2>/dev/null
-  # Private on every write, not only on creation: owned real dir 0700, never a symlinked/foreign log.
+  # Private before every write: an owned real dir we can make 0700 (then no one else can swap
+  # entries in it), and only a regular owned log, made 0600 before it's rotated or appended to.
   if [ -L "$d" ] || [ ! -d "$d" ] || [ ! -O "$d" ]; then return 0; fi
-  chmod 700 "$d" 2>/dev/null
+  chmod 700 "$d" 2>/dev/null || return 0
   f="$d/report.log"   # rotated at ~1 MB so a forgotten LINEARB_DEBUG=1 can't grow it forever
-  if [ -L "$f" ] || { [ -e "$f" ] && [ ! -O "$f" ]; }; then return 0; fi
+  if [ -L "$f" ] || { [ -e "$f" ] && { [ ! -f "$f" ] || [ ! -O "$f" ]; }; }; then return 0; fi
+  if [ -f "$f" ]; then chmod 600 "$f" 2>/dev/null || return 0; fi
   [ -f "$f" ] && [ "$(wc -c < "$f")" -gt 1048576 ] 2>/dev/null && mv -f "$f" "$f.old" 2>/dev/null
   (umask 077; printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$f") 2>/dev/null || true
-  chmod 600 "$f" 2>/dev/null || true
 }
 
 API_URL="${LINEARB_API_URL:-https://public-api.linearb.io}"
