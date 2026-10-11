@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.1.2] - 2026-10-11
+
+### Added
+
+- Opt-in troubleshooting log: `LINEARB_DEBUG=1` writes each report's outcome (skip reason or HTTP status) to `${XDG_CACHE_HOME:-~/.cache}/agentic-advisor/report.log`, rotated at 1 MB. Lines for sent events include the grade and repo name; no line contains the token, email, prompt or payload. The log stays private (folder 0700, file 0600, symlinked logs and rotation targets refused). ([#9](https://github.com/linear-b/agent-plugins/pull/9))
+
+### Changed
+
+- With no `LINEARB_API_TOKEN`, the verdict now says `LINEARB_API_TOKEN not set` and tells the user how to set it, instead of a generic "signals unavailable" that looked like a working setup. ([#9](https://github.com/linear-b/agent-plugins/pull/9))
+- Hooks no longer fail under `set -u` when `HOME` and `XDG_CACHE_HOME` are both unset. ([#9](https://github.com/linear-b/agent-plugins/pull/9))
+
 ## [1.1.1] - 2026-10-08
 
 ### Fixed

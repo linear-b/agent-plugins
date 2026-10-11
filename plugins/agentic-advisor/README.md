@@ -81,4 +81,9 @@ Then **launch Claude Code from a shell that has it exported** (hooks and the ski
 ## Opting out
 
 - **Telemetry:** `export LINEARB_TELEMETRY=0` (also accepts `false` / `off` / `no`) and relaunch Claude Code. The skill keeps working with your token; only reporting stops.
+
 - **Everything:** disable the plugin (`/plugin`) to stop the auto-trigger. The hooks only inject a suggestion to run the skill and (optionally) report a metric — they never block your work.
+
+## Troubleshooting
+
+Reporting is silent by design, so a missing event shows no error. To see what happened, `export LINEARB_DEBUG=1`, relaunch Claude Code, run one code task, and check `${XDG_CACHE_HOME:-~/.cache}/agentic-advisor/report.log` (rotated to `report.log.old` at 1 MB). Each line gives the outcome: a skip reason (for example `LINEARB_API_TOKEN not set in this session`) or the HTTP status of a sent event (`200` = recorded, `401`/`403` = bad token, `422` = rejected payload). Lines for sent events include the grade and repo name; no line contains your token, email, prompt or the payload, and the log is private to your user (0600).
