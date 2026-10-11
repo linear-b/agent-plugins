@@ -94,6 +94,19 @@ head -c 1100000 /dev/zero | tr '\0' x > "$H/.cache/agentic-advisor/report.log"; 
 run "$H" Stop LINEARB_DEBUG=1
 check "oversized 0644 log is rotated to a 0600 .old" test "$(mode "$H/.cache/agentic-advisor/report.log.old")" = 600
 
+H="$W/oldlink"; mkdir -p "$H/.cache/agentic-advisor" "$W/planted"
+(umask 077; head -c 1100000 /dev/zero | tr '\0' x > "$H/.cache/agentic-advisor/report.log")
+ln -s "$W/planted" "$H/.cache/agentic-advisor/report.log.old"
+run "$H" Stop LINEARB_DEBUG=1
+check "rotation never moves the log through a symlinked .old" test -z "$(ls -A "$W/planted")"
+check "symlinked .old is replaced by a regular file" test -f "$H/.cache/agentic-advisor/report.log.old"
+check "rotated .old is no longer a symlink" test ! -L "$H/.cache/agentic-advisor/report.log.old"
+
+H="$W/olddir"; mkdir -p "$H/.cache/agentic-advisor/report.log.old"
+(umask 077; head -c 1100000 /dev/zero | tr '\0' x > "$H/.cache/agentic-advisor/report.log")
+run "$H" Stop LINEARB_DEBUG=1
+check "rotation skipped when .old is a directory (nothing moved into it)" test -z "$(ls -A "$H/.cache/agentic-advisor/report.log.old")"
+
 H="$W/symlink"; mkdir -p "$H/.cache/agentic-advisor"; : > "$W/elsewhere"
 ln -s "$W/elsewhere" "$H/.cache/agentic-advisor/report.log"
 run "$H" Stop LINEARB_DEBUG=1

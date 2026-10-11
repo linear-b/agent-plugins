@@ -62,7 +62,12 @@ dbg() {
   f="$d/report.log"   # rotated at ~1 MB so a forgotten LINEARB_DEBUG=1 can't grow it forever
   if [ -L "$f" ] || { [ -e "$f" ] && { [ ! -f "$f" ] || [ ! -O "$f" ]; }; }; then return 0; fi
   if [ -f "$f" ]; then chmod 600 "$f" 2>/dev/null || return 0; fi
-  [ -f "$f" ] && [ "$(wc -c < "$f")" -gt 1048576 ] 2>/dev/null && mv -f "$f" "$f.old" 2>/dev/null
+  if [ -f "$f" ] && [ "$(wc -c < "$f")" -gt 1048576 ] 2>/dev/null; then
+    # Never rotate into a directory or through a planted symlink: clear .old first, give up if it stays.
+    rm -f "$f.old" 2>/dev/null
+    if [ -e "$f.old" ] || [ -L "$f.old" ]; then return 0; fi
+    mv -f "$f" "$f.old" 2>/dev/null || return 0
+  fi
   (umask 077; printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$f") 2>/dev/null || true
 }
 
