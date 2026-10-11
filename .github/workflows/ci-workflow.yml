@@ -37,9 +37,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Shellcheck
-        run: shellcheck plugins/*/hooks/*.sh tests/*/*.sh
+        run: shellcheck plugins/*/hooks/*.sh scripts/*.sh tests/*/*.sh
+
+      - name: Version bump and CHANGELOG guard
+        if: github.event_name == 'pull_request'
+        run: scripts/version-guard.sh "origin/${{ github.base_ref }}"
 
   hook-tests:
     runs-on: ${{ matrix.os }}
