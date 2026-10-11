@@ -65,7 +65,8 @@ deny() { # $1 = reason fed back to the model
 }
 
 # Per-user state dir (not shared /tmp): another local user can't plant or read markers.
-marker_dir="${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor"
+[ -n "${XDG_CACHE_HOME:-}${HOME:-}" ] || exit 0   # no cache root -> nothing to remember, fail open
+marker_dir="${XDG_CACHE_HOME:-${HOME:-}/.cache}/agentic-advisor"
 (umask 077; mkdir -p "$marker_dir") 2>/dev/null || true
 [ -O "$marker_dir" ] || exit 0   # not ours / not creatable -> fail open
 

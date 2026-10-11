@@ -9,6 +9,7 @@
 ### Changed
 
 - With no `LINEARB_API_TOKEN`, the verdict now says `LINEARB_API_TOKEN not set` and tells the user how to set it, instead of a generic "signals unavailable" that looked like a working setup. ([#9](https://github.com/linear-b/agent-plugins/pull/9))
+- Hooks no longer fail under `set -u` when `HOME` and `XDG_CACHE_HOME` are both unset. ([#9](https://github.com/linear-b/agent-plugins/pull/9))
 
 ## [1.1.1] - 2026-10-08
 

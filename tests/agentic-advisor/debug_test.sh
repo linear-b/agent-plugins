@@ -103,5 +103,9 @@ printf '{"hook_event_name":"Stop","session_id":"nohome","transcript_path":"%s","
   | env -u HOME -u XDG_CACHE_HOME -u LINEARB_API_TOKEN -u LB_PLUGIN_REPORT_METRICS_TOKEN LINEARB_DEBUG=1 bash "$REPORT" 2>/dev/null
 check "HOME and XDG_CACHE_HOME unset: hook still exits 0" test $? -eq 0
 
+printf '{"hook_event_name":"UserPromptSubmit","session_id":"nohome","cwd":"%s","prompt":"fix ABC-1"}' "$REPO" \
+  | env -u HOME -u XDG_CACHE_HOME bash "$ROOT/plugins/agentic-advisor/hooks/agentic-advisor-trigger.sh" >/dev/null 2>&1
+check "trigger with HOME and XDG_CACHE_HOME unset: exits 0" test $? -eq 0
+
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]
