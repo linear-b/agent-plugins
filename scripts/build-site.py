@@ -239,6 +239,42 @@ def rollout(names):
   %s</div>""" % code_block(managed_settings(names))
 
 
+ICON_SPARK = ('<svg viewBox="0 0 24 24" aria-hidden="true"><g stroke="currentColor" stroke-width="2.2" stroke-linecap="round">'
+              '<path d="M12 2.5v19M2.5 12h19M5.3 5.3l13.4 13.4M18.7 5.3 5.3 18.7M8.3 3.3l7.4 17.4M15.7 3.3 8.3 20.7"/></g></svg>')
+ICON_TERM = ('<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
+             'stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7 9 3 3-3 3M12.5 15H17"/></svg>')
+ICON_COPY = ('<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">'
+             '<rect x="8" y="8" width="12" height="12" rx="3"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>')
+ICON_KEY = ('<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
+            'stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M14 9l2 2"/></svg>')
+
+
+def install_panel(names):
+    """Header 'Install' popover: a prompt for Claude Code, or one terminal command."""
+    ids = ["%s@%s" % (n, MARKETPLACE) for n in names]
+    repo = REPO_URL.split("github.com/")[1]
+    cmd = " && ".join(["claude plugin marketplace add %s" % repo] + ["claude plugin install %s" % i for i in ids])
+    what = names[0] if len(names) == 1 else "the LinearB plugins"
+    prompt = ("Install %s for me: run `claude plugin marketplace add %s`, then %s. "
+              "Then check whether LINEARB_API_TOKEN is set in my environment. If it isn't, tell me how to create one "
+              "(LinearB > Settings > API Tokens) and export it before restarting Claude Code."
+              % (what, repo, ", ".join("`claude plugin install %s`" % i for i in ids)))
+    return """<div class="pop" id="install-pop" role="dialog" aria-label="Install" hidden>
+  <div class="callout">{key}<div><strong>Needs a LinearB API token.</strong>
+  Export <code>LINEARB_API_TOKEN</code> in the shell you launch Claude Code from; it reads the environment at startup.</div></div>
+  <div class="ways">
+    <div class="way claude"><p class="way-label">{spark}Ask Claude</p><p class="way-title">Claude installs it for you.</p>
+      <button class="way-btn" data-copy="{prompt}">{spark}<span>Copy for Claude</span></button>
+      <p class="way-hint">Paste into Claude Code, press Enter.</p></div>
+    <div class="way"><p class="way-label">{term}Terminal</p><p class="way-title">Run one command.</p>
+      <button class="way-btn dark" data-copy="{cmd}">{copy}<span>Copy command</span></button>
+      <p class="way-hint mono" title="{cmd}">{cmd_text}</p></div>
+  </div>
+  <p class="pop-foot">Then run <code>/reload-plugins</code> in Claude Code, or restart it if you just exported the token.</p>
+</div>""".format(key=ICON_KEY, spark=ICON_SPARK, term=ICON_TERM, copy=ICON_COPY,
+                 prompt=html.escape(prompt, quote=True), cmd=html.escape(cmd, quote=True), cmd_text=html.escape(cmd))
+
+
 def rel_id(p, r):
     return "%s-v%s" % (slug(p["name"]), slug(r["version"]))
 
@@ -278,12 +314,12 @@ def logo(root):
     return re.sub(r'\s(width|height)="[^"]*"', "", svg, count=2).replace("<svg ", '<svg aria-hidden="true" ', 1)
 
 
-def page(root, title, desc, body, base, active, extra_head="", scripts=""):
+def page(root, title, desc, body, base, active, names, extra_head="", scripts=""):
     nav = [("Plugins", base + "#plugins", "plugins"), ("Changelog", base + "changelog/", "changelog")]
     links = "".join('<a href="%s"%s>%s</a>' % (h, ' aria-current="page"' if k == active else "", t)
                     for t, h, k in nav)
     fill = {"TITLE": html.escape(title), "DESC": html.escape(desc, quote=True), "BASE": base, "LOGO": logo(root),
-            "NAV": links, "HEAD": extra_head, "BODY": body, "SCRIPTS": scripts, "REPO": REPO_URL, "CSS": CSS, "JS": JS}
+            "NAV": links, "INSTALL": install_panel(names), "HEAD": extra_head, "BODY": body, "SCRIPTS": scripts, "REPO": REPO_URL, "CSS": CSS, "JS": JS}
     # One pass, so a literal "{{...}}" inside README content is never substituted.
     return re.sub(r"\{\{([A-Z]+)\}\}", lambda m: fill[m.group(1)], SHELL)
 
@@ -336,7 +372,7 @@ def render_home(root, market, plugins):
 </section>
 """.format(box=install_box("/plugin marketplace add linear-b/agent-plugins"),
            first=html.escape(first), mk=MARKETPLACE, rollout=rollout([p["name"] for p in plugins]), cards="".join(cards), news="".join(news), repo=REPO_URL)
-    return page(root, "LinearB Agent Plugins", desc, body, "", "home")
+    return page(root, "LinearB Agent Plugins", desc, body, "", "home", [p["name"] for p in plugins])
 
 
 def render_plugin(root, p):
@@ -368,7 +404,7 @@ def render_plugin(root, p):
         head = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap">'
         scripts = '<script src="%s" integrity="%s" crossorigin="anonymous"></script><script>%s</script>' % (
             MERMAID_JS[0], MERMAID_JS[1], DIAGRAM_JS)
-    return page(root, "%s · LinearB Agent Plugins" % p["name"], p["description"], body, base, "plugin", head, scripts)
+    return page(root, "%s · LinearB Agent Plugins" % p["name"], p["description"], body, base, "plugin", [p["name"]], head, scripts)
 
 
 def render_changelog(root, plugins):
@@ -404,7 +440,7 @@ def render_changelog(root, plugins):
 </div></div>
 """.format(nav="\n".join(nav), chips=chips, main="\n".join(main))
     return page(root, "Changelog · LinearB Agent Plugins", "What changed in each release of LinearB's Claude Code plugins.",
-                body, base, "changelog", "", "<script>%s</script>" % CHANGELOG_JS)
+                body, base, "changelog", [p["name"] for p in plugins], "", "<script>%s</script>" % CHANGELOG_JS)
 
 
 def render_feed(plugins):
@@ -434,15 +470,15 @@ def render_feed(plugins):
 
 # LinearB "Buzz" design system (linweb): Outfit, slate primary, bright-blue brand, Buzz status colors.
 CSS = r"""
-:root{--bg:#ffffff;--surface:#f5f6fa;--card:#ffffff;--fg:#0a0a0a;--primary:#383f48;--muted:#61656c;--line:#e4e4e7;
+:root{--claude:#c4623f;--claude-btn:#d97757;--claude-soft:#fbeee8;--bg:#ffffff;--surface:#f5f6fa;--card:#ffffff;--fg:#0a0a0a;--primary:#383f48;--muted:#61656c;--line:#e4e4e7;
 --brand:#5467ff;--brand-strong:#1831f4;--brand-soft:#eef0ff;--on-brand:#ffffff;--code:#f1f2f6;
 --success:#16a34a;--success-soft:#e7f6ec;--attention:#b45309;--attention-soft:#fef3e2;--destructive:#bf1245;--destructive-soft:#fce8ee;
 --font:"Outfit",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 --radius:12px;color-scheme:light}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0a0a0a;--surface:#111113;--card:#161618;--fg:#fafafa;--primary:#e4e4e7;--muted:#a1a1aa;--line:#262626;
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--claude:#e8957a;--claude-soft:#2a1d18;--bg:#0a0a0a;--surface:#111113;--card:#161618;--fg:#fafafa;--primary:#e4e4e7;--muted:#a1a1aa;--line:#262626;
 --brand:#7c88ff;--brand-strong:#9aa3ff;--brand-soft:#1c1f45;--on-brand:#0a0a0a;--code:#1d1d21;
 --success:#4ade80;--success-soft:#11281a;--attention:#fbbf24;--attention-soft:#2e2209;--destructive:#fb7194;--destructive-soft:#331520;color-scheme:dark}}
-:root[data-theme="dark"]{--bg:#0a0a0a;--surface:#111113;--card:#161618;--fg:#fafafa;--primary:#e4e4e7;--muted:#a1a1aa;--line:#262626;
+:root[data-theme="dark"]{--claude:#e8957a;--claude-soft:#2a1d18;--bg:#0a0a0a;--surface:#111113;--card:#161618;--fg:#fafafa;--primary:#e4e4e7;--muted:#a1a1aa;--line:#262626;
 --brand:#7c88ff;--brand-strong:#9aa3ff;--brand-soft:#1c1f45;--on-brand:#0a0a0a;--code:#1d1d21;
 --success:#4ade80;--success-soft:#11281a;--attention:#fbbf24;--attention-soft:#2e2209;--destructive:#fb7194;--destructive-soft:#331520;color-scheme:dark}
 *{box-sizing:border-box}
@@ -463,6 +499,28 @@ code{font:.85em var(--mono);background:var(--code);padding:1px 6px;border-radius
 .top nav a{color:var(--muted);padding:6px 12px;border-radius:8px;font-size:15px}
 .top nav a:hover,.top nav a[aria-current]{color:var(--fg);background:var(--surface);text-decoration:none}
 .icon-btn{border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:8px;width:34px;height:34px;cursor:pointer;font:inherit}
+.top-in{position:relative}
+.install-btn{display:inline-flex;align-items:center;gap:8px;margin-left:6px;border:0;border-radius:10px;padding:8px 14px;background:var(--fg);color:var(--bg);font:600 15px var(--font);cursor:pointer}
+.chev{width:6px;height:6px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg);margin-top:-3px;transition:transform .15s}
+.install-btn[aria-expanded="true"] .chev{transform:rotate(-135deg);margin-top:3px}
+.pop{position:absolute;right:20px;top:58px;width:min(560px,calc(100vw - 32px));background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;box-shadow:0 24px 60px -20px rgb(0 0 0/.35);z-index:10}
+.callout{display:flex;gap:12px;background:var(--attention-soft);color:var(--fg);border-radius:12px;padding:14px 16px;font-size:14.5px;line-height:1.5}
+.callout svg{width:22px;height:22px;flex:none;color:var(--attention);margin-top:1px}
+.callout strong{display:block;color:var(--attention)}
+.ways{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.way{background:var(--surface);border-radius:14px;padding:16px;min-width:0;display:flex;flex-direction:column}
+.way.claude{background:linear-gradient(160deg,var(--claude-soft),var(--surface) 70%)}
+.way-label{display:flex;align-items:center;gap:8px;margin:0;font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.way.claude .way-label{color:var(--claude)}
+.way-label svg{width:20px;height:20px}
+.way-title{margin:6px 0 14px;font-size:17px;font-weight:500;color:var(--muted)}
+.way-btn{display:flex;align-items:center;justify-content:center;gap:10px;border:0;border-radius:11px;padding:12px;font:600 15.5px var(--font);cursor:pointer;background:var(--claude-btn);color:#1a0f0a}
+.way-btn svg{width:20px;height:20px}
+.way-btn.dark{background:var(--fg);color:var(--bg)}
+.way-btn:hover{filter:brightness(1.08)}
+.way-hint{margin:8px 0 0;font-size:13.5px;color:var(--muted)}
+.way-hint.mono{font-family:var(--mono);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pop-foot{margin:12px 2px 2px;font-size:14px;color:var(--muted)}
 .wrap{max-width:1160px;margin:0 auto;padding:40px 20px 72px}
 .btn{display:inline-flex;align-items:center;border-radius:9px;padding:9px 16px;font:500 15px var(--font);background:var(--primary);color:var(--bg);border:1px solid transparent;cursor:pointer}
 .btn:hover{text-decoration:none;filter:brightness(1.15)}
@@ -582,7 +640,9 @@ footer{border-top:1px solid var(--line);color:var(--muted);font-size:14px}
 .foot .spacer{flex:1}
 @media (max-width:860px){.doc{grid-template-columns:minmax(0,1fr);gap:0}.side{display:none}.split,.rollout{grid-template-columns:minmax(0,1fr)}
 .brand span{display:none}.wrap{padding-top:24px}.release{padding:14px 16px}.rel-head .gh{margin-left:0}.search{flex-basis:100%}.top nav a{padding:6px 8px}}
-@media (max-width:480px){.top-in{gap:8px}.top nav .gh-link{display:none}.top nav{gap:0}}
+@media (max-width:860px){.top nav .gh-link{display:none}}
+@media (max-width:560px){.ways{grid-template-columns:1fr}.pop{right:16px;top:60px}}
+@media (max-width:480px){.top-in{gap:8px}.top nav{gap:0}.top nav>a{display:none}}
 """
 
 SHELL = r"""<!doctype html>
@@ -603,7 +663,8 @@ SHELL = r"""<!doctype html>
 <body>
 <header class="top"><div class="top-in">
 <a class="brand" href="{{BASE}}" aria-label="LinearB Agent Plugins home">{{LOGO}}<span>Agent Plugins</span></a>
-<nav aria-label="Site">{{NAV}}<a class="gh-link" href="{{REPO}}">GitHub</a><button class="icon-btn" id="theme" aria-label="Toggle dark mode">◐</button></nav>
+<nav aria-label="Site">{{NAV}}<a class="gh-link" href="{{REPO}}/issues">Report a bug</a><a class="gh-link" href="{{REPO}}">GitHub</a><button class="icon-btn" id="theme" aria-label="Toggle dark mode">◐</button><button class="install-btn" id="install-btn" aria-expanded="false" aria-controls="install-pop">Install<span class="chev"></span></button></nav>
+{{INSTALL}}
 </div></header>
 <main class="wrap">
 {{BODY}}
@@ -624,10 +685,16 @@ JS = r"""
     var cur=root.getAttribute("data-theme"),dark=cur?cur==="dark":matchMedia("(prefers-color-scheme: dark)").matches;
     var next=dark?"light":"dark";root.setAttribute("data-theme",next);save("theme",next);
     document.dispatchEvent(new Event("themechange"))};
-  document.querySelectorAll(".copy").forEach(function(b){b.onclick=function(e){
-    e.stopPropagation();var label=b.textContent;
-    var done=function(){b.textContent="Copied";setTimeout(function(){b.textContent=label},1500)};
+  document.querySelectorAll(".copy,.way-btn").forEach(function(b){b.onclick=function(e){
+    e.stopPropagation();var t=b.querySelector("span")||b,label=t.textContent;
+    var done=function(){t.textContent="Copied";setTimeout(function(){t.textContent=label},1500)};
     if(navigator.clipboard)navigator.clipboard.writeText(b.dataset.copy).then(done,function(){})}});
+  // Install popover.
+  var ib=document.getElementById("install-btn"),pop=document.getElementById("install-pop");
+  function openPop(o){pop.hidden=!o;ib.setAttribute("aria-expanded",o?"true":"false")}
+  ib.onclick=function(e){e.stopPropagation();openPop(pop.hidden)};
+  document.addEventListener("click",function(e){if(!pop.hidden&&!pop.contains(e.target))openPop(false)});
+  document.addEventListener("keydown",function(e){if(e.key==="Escape"&&!pop.hidden){openPop(false);ib.focus()}});
   // Relative dates, absolute on hover.
   var now=Date.now();document.querySelectorAll("time[datetime]").forEach(function(el){
     var d=Math.floor((now-new Date(el.dateTime+"T00:00:00Z"))/864e5);if(isNaN(d)||d<0)return;

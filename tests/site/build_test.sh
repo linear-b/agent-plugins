@@ -30,6 +30,8 @@ for src in $(jq -r '.plugins[].source' "$ROOT/.claude-plugin/marketplace.json");
     check "$name $v in the changelog" has "$W/site/changelog/index.html" "id=\"$name-v${v//./-}\""
   done < <(sed -n 's/^## \[\([^]]*\)\].*/\1/p' "$d/CHANGELOG.md")
 done
+check "install popover has the one-line command" has "$W/site/agentic-advisor/index.html" 'claude plugin marketplace add linear-b/agent-plugins &amp;&amp; claude plugin install agentic-advisor@linearb-ai'
+check "install popover has the Claude prompt" has "$W/site/agentic-advisor/index.html" 'Install agentic-advisor for me'
 check "README diagram rendered as a diagram" has "$W/site/agentic-advisor/index.html" '<pre class="mermaid">'
 check "README #anchors kept" has "$W/site/agentic-advisor/index.html" 'id="usage-telemetry-on-by-default"'
 
