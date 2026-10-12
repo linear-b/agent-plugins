@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="tall" viewBox="0 0 600 1520" role="img" aria-label="What agentic-advisor looks at: LinearB repo health, incidents and ticket; local git history on the files you touch; and your request. Effort is the highest of the three. Only the grade and its metadata are reported to your own LinearB org; never code, file contents or full prompts." font-family="Kalam, 'Comic Sans MS', cursive">
+<title>What agentic-advisor looks at: LinearB repo health, incidents and ticket; local git history on the files you touch; and your request. Effort is the highest of the three. Only the grade and its metadata are reported to your own LinearB org; never code, file contents or full prompts.</title>
+<text x="300.0" y="38.0" font-size="30" text-anchor="middle" style="fill:var(--fg,#0a0a0a)" font-weight="700"><tspan x="300.0" dy="0">What LinearB looks at</tspan></text>
+<text x="300.0" y="70.0" font-size="20" text-anchor="middle" style="fill:var(--muted,#61656c)"><tspan x="300.0" dy="0">before your agent writes code</tspan></text>
+<rect x="40.0" y="95.0" width="520.0" height="80.0" rx="10" style="fill:var(--attention-soft,#fef3e2)"/>
+<path d="M47.8 95.2 L300.9 95.7 L560.7 94.6 L559.7 135.8 L560.3 174.5 L300.7 176.3 L39.2 175.2 L38.6 134.0 L39.9 94.5 " style="fill:none;stroke:var(--attention,#b45309)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M47.0 94.2 L298.8 94.9 L558.4 94.5 L560.3 136.7 L560.4 176.4 L299.5 175.1 L39.7 174.8 L40.2 134.6 L39.6 94.0 " style="fill:none;stroke:var(--attention,#b45309)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="300.0" y="129.8" font-size="20" text-anchor="middle" style="fill:var(--fg,#0a0a0a)" font-weight="700"><tspan x="300.0" dy="0">You start a code task</tspan></text>
+<text x="300.0" y="153.5" font-size="19" text-anchor="middle" style="fill:var(--fg,#0a0a0a)"><tspan x="300.0" dy="0">prompt, ticket key, or first file edit</tspan></text>
+<path d="M300.0 175.0 L300.5 205.4 " style="fill:none;stroke:var(--muted,#61656c)" stroke-width="2" stroke-linecap="round"/>
+<path d="M305.5 193.2 L300.0 205.0" style="fill:none;stroke:var(--muted,#61656c)" stroke-width="2" stroke-linecap="round"/>
+<path d="M294.5 193.2 L300.0 205.0" style="fill:none;stroke:var(--muted,#61656c)" stroke-width="2" stroke-linecap="round"/>
+<rect x="20.0" y="205.0" width="560.0" height="310.0" rx="10" style="fill:var(--brand-soft,#eef0ff)"/>
+<path d="M26.4 204.1 L300.5 203.9 L580.7 204.6 L582.5 360.4 L580.9 514.3 L299.1 514.0 L19.1 514.9 L18.7 359.6 L17.9 204.4 " style="fill:none;stroke:var(--brand,#5467ff)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M26.8 205.5 L298.3 206.0 L578.3 204.6 L579.8 359.8 L578.4 515.0 L299.6 514.5 L21.9 515.7 L19.7 359.7 L18.2 205.6 " style="fill:none;stroke:var(--brand,#5467ff)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="38.0" y="237.0" font-size="22" text-anchor="start" style="fill:var(--brand-strong,#1831f4)" font-weight="700"><tspan x="38.0" dy="0">1. LinearB API (your org, read-only)</tspan></text>
+<text x="38.0" y="501.0" font-size="17" text-anchor="start" style="fill:var(--brand-strong,#1831f4)"><tspan x="38.0" dy="0">repo health is cached for 24 hours</tspan></text>
+<rect x="40.0" y="255.0" width="250.0" height="115.0" rx="10" style="fill:var(--card,#ffffff)"/>
+<path d="M47.2 255.3 L163.6 254.3 L290.2 255.4 L289.9 311.7 L291.9 370.7 L165.1 371.6 L40.9 371.3 L39.5 312.3 L38.4 256.1 " style="fill:none;stroke:var(--brand,#5467ff)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M47.2 255.7 L163.2 255.2 L289.3 256.6 L290.0 312.2 L291.0 368.9 L163.5 369.5 L38.9 370.0 L38.3 312.9 L39.3 255.1 " style="fill:none;stroke:var(--brand,#5467ff)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="165.0" y="295.4" font-size="20" text-anchor="middle" style="fill:var(--fg,#0a0a0a)" font-weight="700"><tspan x="165.0" dy="0">Repo health</tspan></text>
+<text x="165.0" y="319.1" font-size="19" text-anchor="middle" style="fill:var(--muted,#61656c)"><tspan x="165.0" dy="0">rework % (30d)</tspan><tspan x="165.0" dy="23.75">unreviewed merges</tspan></text>
+<rect x="310.0" y="255.0" width="250.0" height="115.0" rx="10" style="fill:var(--card,#ffffff)"/>
+<path d="M317.6 256.3 L434.4 256.9 L561.9 256.2 L559.9 313.2 L560.6 370.6 L434.3 370.6 L308.2 368.6 L309.8 313.3 L309.9 256.6 " style="fill:none;stroke:var(--brand,#5467ff)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M318.9 256.3 L436.1 256.1 L559.7 255.4 L560.6 313.7 L560.6 371.4 L436.7 372.0 L310.1 370.8 L310.9 313.8 L310.8 256.9 " style="fill:none;stroke:var(--brand,#5467ff)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="435.0" y="295.4" font-size="20" text-anchor="middle" style="fill:var(--fg,#0a0a0a)" font-weight="700"><tspan x="435.0" dy="0">Incidents</tspan></text>
+<text x="435.0" y="319.1" font-size="19" text-anchor="middle" style="fill:var(--muted,#61656c)"><tspan x="435.0" dy="0">recent + open</tspan><tspan x="435.0" dy="23.75">org-wide</tspan></text>
+<rect x="40.0" y="385.0" width="520.0" height="85.0" rx="10" style="fill:var(--card,#ffffff)"/>
+<path d="M46.7 385.8 L298.9 386.6 L558.1 384.5 L558.7 427.7 L559.5 468.6 L301.3 469.9 L40.5 470.6 L39.2 428.3 L38.2 385.7 " style="fill:none;stroke:var(--brand,#5467ff)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M49.0 386.3 L301.9 386.3 L561.6 385.4 L560.2 426.2 L560.2 469.1 L298.9 469.5 L39.0 470.0 L39.5 429.0 L41.8 386.2 " style="fill:none;stroke:var(--brand,#5467ff)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="300.0" y="411.3" font-size="19" text-anchor="middle" style="fill:var(--fg,#0a0a0a)" font-weight="700"><tspan x="300.0" dy="0">Ticket</tspan></text>
+<text x="300.0" y="433.8" font-size="18" text-anchor="middle" style="fill:var(--muted,#61656c)"><tspan x="300.0" dy="0">type, priority, points, labels</tspan><tspan x="300.0" dy="22.5">(only when a key is named)</tspan></text>
+<rect x="20.0" y="535.0" width="560.0" height="225.0" rx="10" style="fill:var(--success-soft,#e7f6ec)"/>
+<path d="M26.6 533.5 L298.8 532.6 L581.1 532.8 L581.7 646.2 L580.1 759.5 L300.3 760.5 L19.6 761.2 L19.8 648.3 L18.9 533.0 " style="fill:none;stroke:var(--success,#16a34a)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M27.9 534.0 L299.7 534.5 L578.6 535.3 L579.3 647.6 L581.3 758.3 L301.0 759.8 L18.7 759.4 L19.9 647.7 L19.7 534.1 " style="fill:none;stroke:var(--success,#16a34a)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="38.0" y="567.0" font-size="22" text-anchor="start" style="fill:var(--success,#15803d)" font-weight="700"><tspan x="38.0" dy="0">2. Local git (stays on your machine)</tspan></text>
+<text x="38.0" y="746.0" font-size="17" text-anchor="start" style="fill:var(--success,#15803d)"><tspan x="38.0" dy="0">only on fragile repos or sensitive files</tspan></text>
+<rect x="40.0" y="585.0" width="250.0" height="125.0" rx="10" style="fill:var(--card,#ffffff)"/>
+<path d="M49.2 585.9 L166.7 585.9 L291.0 585.5 L292.1 648.1 L290.5 709.5 L165.2 711.0 L41.3 710.8 L40.0 648.3 L41.3 586.4 " style="fill:none;stroke:var(--success,#16a34a)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M48.0 583.5 L164.6 582.7 L291.0 584.0 L291.8 646.7 L291.7 708.9 L166.3 708.9 L39.0 711.0 L39.2 647.8 L40.2 583.5 " style="fill:none;stroke:var(--success,#16a34a)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="165.0" y="630.4" font-size="20" text-anchor="middle" style="fill:var(--fg,#0a0a0a)" font-weight="700"><tspan x="165.0" dy="0">Files you&#x27;ll touch</tspan></text>
+<text x="165.0" y="654.1" font-size="19" text-anchor="middle" style="fill:var(--muted,#61656c)"><tspan x="165.0" dy="0">lines rewritten</tspan><tspan x="165.0" dy="23.75">(90d), fix/revert</tspan></text>
+<rect x="310.0" y="585.0" width="250.0" height="125.0" rx="10" style="fill:var(--card,#ffffff)"/>
+<path d="M319.1 585.2 L436.4 585.0 L559.5 584.1 L560.3 648.0 L561.3 710.5 L436.2 711.2 L308.9 711.6 L310.2 648.1 L311.4 584.5 " style="fill:none;stroke:var(--success,#16a34a)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M318.1 584.7 L436.6 586.5 L561.4 586.1 L559.6 648.4 L559.9 709.3 L434.7 708.7 L308.3 709.4 L309.9 646.8 L309.9 584.9 " style="fill:none;stroke:var(--success,#16a34a)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="435.0" y="630.4" font-size="20" text-anchor="middle" style="fill:var(--fg,#0a0a0a)" font-weight="700"><tspan x="435.0" dy="0">Ownership</tspan></text>
+<text x="435.0" y="654.1" font-size="19" text-anchor="middle" style="fill:var(--muted,#61656c)"><tspan x="435.0" dy="0">who owns the lines,</tspan><tspan x="435.0" dy="23.75">is it your code?</tspan></text>
+<rect x="20.0" y="780.0" width="560.0" height="130.0" rx="10" style="fill:var(--dg-purple-soft,#f1ecff)"/>
+<path d="M26.7 780.7 L298.5 780.2 L578.8 779.5 L578.3 844.8 L579.4 909.1 L300.5 909.7 L20.7 909.4 L20.0 846.0 L19.4 780.4 " style="fill:none;stroke:var(--dg-purple,#7c5cff)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M27.4 781.4 L298.7 780.5 L579.6 781.5 L580.9 844.3 L581.1 909.1 L299.0 909.1 L19.5 911.4 L20.4 845.1 L19.4 781.8 " style="fill:none;stroke:var(--dg-purple,#7c5cff)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="38.0" y="812.0" font-size="22" text-anchor="start" style="fill:var(--dg-purple,#6d28d9)" font-weight="700"><tspan x="38.0" dy="0">3. Your request (no calls)</tspan></text>
+<rect x="40.0" y="830.0" width="520.0" height="60.0" rx="10" style="fill:var(--card,#ffffff)"/>
+<path d="M48.0 830.6 L299.7 828.8 L558.5 828.2 L559.7 859.7 L559.4 887.9 L298.4 890.4 L40.1 890.5 L39.7 860.2 L40.0 830.5 " style="fill:none;stroke:var(--dg-purple,#7c5cff)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M48.3 828.4 L299.8 829.0 L560.7 830.3 L560.8 861.2 L559.3 890.4 L300.2 889.5 L40.9 889.7 L41.7 859.8 L39.9 829.1 " style="fill:none;stroke:var(--dg-purple,#7c5cff)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="300.0" y="866.3" font-size="19" text-anchor="middle" style="fill:var(--fg,#0a0a0a)" font-weight="700"><tspan x="300.0" dy="0">scope, breadth, tricky logic, blast radius</tspan></text>
+<path d="M300.0 910.0 L300.3 940.3 " style="fill:none;stroke:var(--muted,#61656c)" stroke-width="2" stroke-linecap="round"/>
+<path d="M305.5 928.2 L300.0 940.0" style="fill:none;stroke:var(--muted,#61656c)" stroke-width="2" stroke-linecap="round"/>
+<path d="M294.5 928.2 L300.0 940.0" style="fill:none;stroke:var(--muted,#61656c)" stroke-width="2" stroke-linecap="round"/>
+<rect x="130.0" y="940.0" width="340.0" height="80.0" rx="10" style="fill:var(--attention-soft,#fef3e2)"/>
+<path d="M139.0 939.7 L301.7 939.4 L471.0 941.2 L469.8 980.7 L470.8 1021.1 L300.1 1021.3 L131.1 1019.4 L131.3 979.9 L131.1 939.5 " style="fill:none;stroke:var(--attention,#b45309)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M139.6 940.5 L300.5 940.4 L469.9 940.4 L470.8 978.7 L471.1 1019.1 L301.1 1019.6 L131.1 1020.9 L132.2 980.9 L132.1 939.8 " style="fill:none;stroke:var(--attention,#b45309)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="300.0" y="974.2" font-size="22" text-anchor="middle" style="fill:var(--fg,#0a0a0a)" font-weight="700"><tspan x="300.0" dy="0">Effort =</tspan></text>
+<text x="300.0" y="1000.5" font-size="21" text-anchor="middle" style="fill:var(--fg,#0a0a0a)"><tspan x="300.0" dy="0">highest of 1, 2, 3</tspan></text>
+<path d="M300.0 1020.0 L300.1 1050.3 " style="fill:none;stroke:var(--muted,#61656c)" stroke-width="2" stroke-linecap="round"/>
+<path d="M305.5 1038.2 L300.0 1050.0" style="fill:none;stroke:var(--muted,#61656c)" stroke-width="2" stroke-linecap="round"/>
+<path d="M294.5 1038.2 L300.0 1050.0" style="fill:none;stroke:var(--muted,#61656c)" stroke-width="2" stroke-linecap="round"/>
+<rect x="20.0" y="1050.0" width="175.0" height="80.0" rx="10" style="fill:var(--success-soft,#e7f6ec)"/>
+<path d="M26.5 1051.4 L107.3 1050.5 L194.0 1050.1 L193.6 1089.4 L194.2 1130.1 L106.6 1129.8 L20.0 1127.8 L18.8 1088.9 L18.0 1051.8 " style="fill:none;stroke:var(--success,#16a34a)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M27.6 1051.3 L107.6 1049.9 L196.6 1048.2 L196.2 1091.0 L196.9 1131.4 L108.7 1132.1 L18.8 1130.7 L19.4 1091.2 L19.2 1050.6 " style="fill:none;stroke:var(--success,#16a34a)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="107.5" y="1085.0" font-size="19" text-anchor="middle" style="fill:var(--fg,#0a0a0a)" font-weight="700"><tspan x="107.5" dy="0">LOW</tspan></text>
+<text x="107.5" y="1107.5" font-size="18" text-anchor="middle" style="fill:var(--fg,#0a0a0a)"><tspan x="107.5" dy="0">lean, small diff</tspan></text>
+<rect x="212.0" y="1050.0" width="175.0" height="80.0" rx="10" style="fill:var(--attention-soft,#fef3e2)"/>
+<path d="M220.1 1048.8 L300.1 1049.7 L387.6 1051.3 L387.4 1089.3 L386.2 1129.9 L300.2 1129.8 L212.0 1129.4 L212.6 1089.4 L212.2 1049.0 " style="fill:none;stroke:var(--attention,#b45309)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M220.8 1049.0 L299.0 1050.1 L386.4 1050.9 L387.4 1090.3 L387.7 1131.5 L299.5 1130.2 L210.3 1128.6 L211.0 1088.4 L213.2 1049.5 " style="fill:none;stroke:var(--attention,#b45309)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="299.5" y="1085.0" font-size="19" text-anchor="middle" style="fill:var(--fg,#0a0a0a)" font-weight="700"><tspan x="299.5" dy="0">MEDIUM</tspan></text>
+<text x="299.5" y="1107.5" font-size="18" text-anchor="middle" style="fill:var(--fg,#0a0a0a)"><tspan x="299.5" dy="0">normal care</tspan></text>
+<rect x="404.0" y="1050.0" width="176.0" height="80.0" rx="10" style="fill:var(--destructive-soft,#fce8ee)"/>
+<path d="M410.6 1048.8 L492.6 1049.3 L581.2 1051.2 L580.5 1089.9 L581.3 1129.8 L492.1 1128.8 L403.1 1129.8 L402.2 1088.0 L402.7 1048.8 " style="fill:none;stroke:var(--destructive,#bf1245)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M412.6 1049.4 L493.3 1049.5 L580.5 1048.1 L579.6 1090.1 L578.9 1129.9 L491.4 1130.1 L403.3 1130.1 L404.6 1089.2 L405.1 1049.0 " style="fill:none;stroke:var(--destructive,#bf1245)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="492.0" y="1085.0" font-size="19" text-anchor="middle" style="fill:var(--fg,#0a0a0a)" font-weight="700"><tspan x="492.0" dy="0">HIGH</tspan></text>
+<text x="492.0" y="1107.5" font-size="18" text-anchor="middle" style="fill:var(--fg,#0a0a0a)"><tspan x="492.0" dy="0">guards + tests</tspan></text>
+<text x="300.0" y="1160.0" font-size="18" text-anchor="middle" style="fill:var(--muted,#61656c)"><tspan x="300.0" dy="0">printed as one verdict line</tspan></text>
+<path d="M300.0 1172.0 L299.8 1197.9 " style="fill:none;stroke:var(--attention,#b45309)" stroke-width="2" stroke-linecap="round" stroke-dasharray="7 7"/>
+<path d="M305.5 1186.2 L300.0 1198.0" style="fill:none;stroke:var(--attention,#b45309)" stroke-width="2" stroke-linecap="round"/>
+<path d="M294.5 1186.2 L300.0 1198.0" style="fill:none;stroke:var(--attention,#b45309)" stroke-width="2" stroke-linecap="round"/>
+<rect x="20.0" y="1200.0" width="560.0" height="300.0" rx="10" style="fill:var(--attention-soft,#fef3e2)"/>
+<path d="M29.4 1201.3 L299.6 1200.6 L579.7 1199.6 L580.2 1349.7 L579.1 1500.0 L300.5 1499.1 L18.9 1499.7 L20.6 1350.6 L22.1 1201.5 " style="fill:none;stroke:var(--attention,#b45309)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M29.0 1198.6 L299.6 1200.1 L579.6 1201.3 L579.8 1349.2 L578.2 1499.1 L299.8 1500.6 L20.6 1501.0 L22.0 1350.4 L21.0 1198.7 " style="fill:none;stroke:var(--attention,#b45309)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="38.0" y="1232.0" font-size="22" text-anchor="start" style="fill:var(--attention,#b45309)" font-weight="700"><tspan x="38.0" dy="0">Reported to your own LinearB org</tspan></text>
+<text x="38.0" y="1486.0" font-size="17" text-anchor="start" style="fill:var(--attention,#b45309)"><tspan x="38.0" dy="0">turn off: LINEARB_TELEMETRY=0</tspan></text>
+<rect x="40.0" y="1250.0" width="520.0" height="95.0" rx="10" style="fill:var(--card,#ffffff)"/>
+<path d="M48.7 1250.7 L301.8 1251.1 L562.1 1249.9 L561.2 1298.1 L561.5 1345.4 L300.9 1344.9 L41.5 1346.8 L40.6 1297.5 L40.2 1250.5 " style="fill:none;stroke:var(--success,#16a34a)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M47.3 1251.5 L297.9 1250.3 L558.7 1250.0 L557.6 1296.5 L558.3 1345.0 L299.2 1345.2 L41.0 1343.5 L39.4 1297.2 L38.8 1251.9 " style="fill:none;stroke:var(--success,#16a34a)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="300.0" y="1281.3" font-size="19" text-anchor="middle" style="fill:var(--fg,#0a0a0a)" font-weight="700"><tspan x="300.0" dy="0">Sent</tspan></text>
+<text x="300.0" y="1303.8" font-size="18" text-anchor="middle" style="fill:var(--muted,#61656c)"><tspan x="300.0" dy="0">grade + evidence, repo, branch,</tspan><tspan x="300.0" dy="22.5">ticket key, your email, token counts</tspan></text>
+<rect x="40.0" y="1360.0" width="520.0" height="90.0" rx="10" style="fill:var(--card,#ffffff)"/>
+<path d="M47.4 1360.2 L300.3 1361.1 L561.0 1359.5 L559.0 1406.7 L559.7 1451.1 L300.3 1450.4 L41.0 1450.3 L40.7 1404.2 L38.6 1360.1 " style="fill:none;stroke:var(--destructive,#bf1245)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M47.6 1360.9 L301.0 1360.7 L560.9 1361.1 L559.2 1404.7 L558.3 1449.3 L298.0 1449.8 L40.0 1449.7 L38.5 1404.5 L39.9 1360.3 " style="fill:none;stroke:var(--destructive,#bf1245)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="300.0" y="1400.0" font-size="19" text-anchor="middle" style="fill:var(--fg,#0a0a0a)" font-weight="700"><tspan x="300.0" dy="0">Never sent</tspan></text>
+<text x="300.0" y="1422.5" font-size="18" text-anchor="middle" style="fill:var(--muted,#61656c)"><tspan x="300.0" dy="0">source code, file contents, full prompts</tspan></text>
+</svg>
