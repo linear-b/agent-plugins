@@ -84,6 +84,8 @@ check "new plugin on the home page" has "$W/site2/index.html" 'href="demo-tool/"
 check "new plugin in the changelog" has "$W/site2/changelog/index.html" 'id="demo-tool-v0-3-0"'
 check "new plugin in home managed settings" has "$W/site2/index.html" '&quot;demo-tool@linearb-ai&quot;: true'
 check "plugin without README/CHANGELOG still builds" test -s "$W/site2/bare/index.html"
+check "no changelog link for a plugin without releases" lacks "$W/site2/bare/index.html" 'changelog/#bare'
+check "no home changelog button for a plugin without releases" lacks "$W/site2/index.html" 'changelog/#bare'
 check "README raw html escaped" lacks "$P" '<script>alert'
 check "table cell html escaped" lacks "$P" '<img src=x'
 check "code span escaped" has "$P" '<code>demo &lt;x&gt;</code>'

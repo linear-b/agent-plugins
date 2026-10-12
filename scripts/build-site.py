@@ -371,10 +371,10 @@ def render_home(root, market, plugins):
                 if latest and latest["date"] else "")
         cards.append(
             '<article class="card"><div class="card-top"><h3><a href="%s/">%s</a></h3><span class="pill ver">v%s</span></div>'
-            '<p>%s</p>%s%s<div class="card-actions"><a class="btn" href="%s/">Read the docs</a>'
-            '<a class="btn ghost" href="changelog/#%s">Changelog</a></div></article>'
+            '<p>%s</p>%s%s<div class="card-actions"><a class="btn" href="%s/">Read the docs</a>%s</div></article>'
             % (p["dir"], html.escape(p["name"]), html.escape(p["version"]), html.escape(p["description"]), meta,
-               install_box("/plugin install %s@%s" % (p["name"], MARKETPLACE)), p["dir"], slug(p["name"])))
+               install_box("/plugin install %s@%s" % (p["name"], MARKETPLACE)), p["dir"],
+               '<a class="btn ghost" href="changelog/#%s">Changelog</a>' % slug(p["name"]) if p["releases"] else ""))
     news = []
     for p, r in sorted(((p, r) for p in plugins for r in p["releases"][:3]),
                        key=lambda x: (x[1]["date"], x[1]["version"]), reverse=True)[:4]:
@@ -418,24 +418,29 @@ def render_plugin(root, p):
     link_base = "%s/blob/main/plugins/%s/" % (REPO_URL, p["dir"])
     body_html, toc = markdown(rest, link_base, p["path"], root)
     toc_html = "".join('<li><a href="#%s">%s</a></li>' % (h, t) for h, t in toc)
-    recent = "".join(render_release(p, r, i == 0, base) for i, r in enumerate(p["releases"][:3]))
+    recent, recent_toc, cl_btn = "", "", ""
+    if p["releases"]:  # a plugin without a CHANGELOG gets no changelog links
+        recent = ('<section class="recent"><h2 id="recent-releases">Recent releases</h2><div class="timeline">%s</div>'
+                  '<a href="../changelog/#%s">All releases →</a></section>'
+                  % ("".join(render_release(p, r, i == 0, base) for i, r in enumerate(p["releases"][:3])), slug(p["name"])))
+        recent_toc = '<li><a href="#recent-releases">Recent releases</a></li>'
+        cl_btn = '<a class="btn ghost" href="../changelog/#%s">Changelog</a>' % slug(p["name"])
     body = """
 <div class="doc">
-<aside class="side"><p class="side-label">On this page</p><ol class="toc">{toc}<li><a href="#recent-releases">Recent releases</a></li></ol></aside>
+<aside class="side"><p class="side-label">On this page</p><ol class="toc">{toc}{recent_toc}</ol></aside>
 <article class="doc-main">
   <p class="crumb"><a href="../#plugins">Plugins</a> / {name}</p>
   <header class="doc-hero"><div class="hero-top"><h1>{name}</h1><span class="pill ver">v{ver}</span></div>
   <p class="lede">{lede}</p>
   {install}
   <details class="team"><summary>Rolling out to a team?</summary>{rollout}</details>
-  <div class="hero-actions"><a class="btn ghost" href="../changelog/#{pslug}">Changelog</a><a class="btn ghost" href="{repo}/tree/main/plugins/{dir}">Source</a></div></header>
+  <div class="hero-actions">{cl_btn}<a class="btn ghost" href="{repo}/tree/main/plugins/{dir}">Source</a></div></header>
   <div class="prose">{body}</div>
-  <section class="recent"><h2 id="recent-releases">Recent releases</h2><div class="timeline">{recent}</div>
-  <a href="../changelog/#{pslug}">All releases →</a></section>
+  {recent}
 </article></div>
 """.format(toc=toc_html, name=html.escape(p["name"]), ver=html.escape(p["version"]), lede=inline(lede, link_base),
            install=install_box("/plugin install %s@%s" % (p["name"], MARKETPLACE)), rollout=rollout([p["name"]]),
-           pslug=slug(p["name"]), repo=REPO_URL, dir=p["dir"], body=body_html, recent=recent)
+           recent_toc=recent_toc, cl_btn=cl_btn, repo=REPO_URL, dir=p["dir"], body=body_html, recent=recent)
     head, scripts = "", ""
     if 'class="mermaid"' in body_html or 'class="figure' in body_html:
         head = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap">'
@@ -510,7 +515,7 @@ def render_feed(plugins):
 CSS = r"""
 :root{--dg-purple:#7c5cff;--dg-purple-soft:#f1ecff;--claude:#c4623f;--claude-btn:#d97757;--claude-soft:#fbeee8;--bg:#ffffff;--surface:#f5f6fa;--card:#ffffff;--fg:#0a0a0a;--primary:#383f48;--muted:#61656c;--line:#e4e4e7;
 --brand:#5467ff;--brand-strong:#1831f4;--brand-soft:#eef0ff;--on-brand:#ffffff;--code:#f1f2f6;
---success:#16a34a;--success-soft:#e7f6ec;--attention:#b45309;--attention-soft:#fef3e2;--destructive:#bf1245;--destructive-soft:#fce8ee;
+--success:#15803d;--success-soft:#e7f6ec;--attention:#b45309;--attention-soft:#fef3e2;--destructive:#bf1245;--destructive-soft:#fce8ee;
 --font:"Outfit",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 --radius:12px;color-scheme:light}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--dg-purple:#a18cff;--dg-purple-soft:#221a3d;--claude:#e8957a;--claude-soft:#2a1d18;--bg:#0a0a0a;--surface:#111113;--card:#161618;--fg:#fafafa;--primary:#e4e4e7;--muted:#a1a1aa;--line:#262626;
@@ -666,7 +671,7 @@ button.filter[aria-pressed="true"]{border-color:currentColor;box-shadow:0 0 0 1p
 .rel-head time{color:var(--muted);font-size:14px}
 .rel-head .gh{margin-left:auto;font-size:14px}
 .anchor{opacity:0;margin-left:-14px;width:14px;display:inline-block;color:var(--muted)}
-.rel-head h3:hover .anchor{opacity:1}
+.rel-head h3:hover .anchor,.anchor:focus-visible{opacity:1}
 .fold{border:0;background:none;color:var(--muted);width:24px;height:24px;margin-left:-6px;border-radius:6px;cursor:pointer;display:grid;place-items:center;padding:0}
 .fold:before{content:"";width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg);margin-top:-3px;transition:transform .15s}
 .fold:hover{background:var(--surface);color:var(--fg)}
