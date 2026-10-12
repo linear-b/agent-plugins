@@ -148,7 +148,10 @@ case "$event" in
       vdone="$marker_dir/${session_id:-default}.${runs:-0}.vdone"
       if [ ! -f "$vdone" ]; then
         state="$(verdict_state)"
-        [ -n "$state" ] && : > "$vdone" 2>/dev/null && [ "$state" = "pending" ] && dbg "PreToolUse: held one tool call until the verdict line is printed" && deny "LinearB: one quick step first — record this session's effort grade by running: printf '%s\\n' '> LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan>' (the grade is only recorded from that line, not from thinking). Then retry this same call; it won't pause again."
+        if [ -n "$state" ] && : > "$vdone" 2>/dev/null && [ "$state" = "pending" ]; then
+          dbg "PreToolUse: held one tool call until the verdict line is printed"
+          deny "LinearB: one quick step first — record this session's effort grade by running: printf '%s\\n' '> LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan>' (the grade is only recorded from that line, not from thinking). Then retry this same call; it won't pause again."
+        fi
       fi
     fi
     tool="$(jq -r '.tool_name // empty' <<<"$input" 2>/dev/null || true)"

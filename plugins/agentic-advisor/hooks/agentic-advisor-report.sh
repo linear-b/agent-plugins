@@ -182,7 +182,8 @@ post() { # $1 = payload json, $2 = short description for the debug log
   # Token on stdin (-H @-), payload from a private temp file: neither is in curl's argv.
   local pf; pf="$(umask 077; mktemp "$marker_dir/payload.XXXXXX" 2>/dev/null)" || { dbg "$event: error: no temp file for ${2:-event}"; return 0; }
   printf '%s' "$1" > "$pf" || { rm -f "$pf"; dbg "$event: error: could not write ${2:-event}"; return 0; }
-  ( ( code="$(curl -sS -m 5 -o "$pf.out" -w '%{http_code}' -X POST "$REPORT_URL" \
+  ( ( umask 077   # $pf.out / $pf.err come from redirection, not mktemp
+      code="$(curl -sS -m 5 -o "$pf.out" -w '%{http_code}' -X POST "$REPORT_URL" \
         -H @- -H "Content-Type: application/json" \
         --data-binary @"$pf" <<<"x-api-key: $token" 2>"$pf.err")"; rc=$?
       why=""
