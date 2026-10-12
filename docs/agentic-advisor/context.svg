@@ -1,5 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" class="wide" viewBox="0 0 1200 910" role="img" aria-label="What agentic-advisor looks at: LinearB repo health, incidents and ticket; local git history on the files you touch; and your request. Effort is the highest of the three. Only the grade and its metadata are reported to your own LinearB org; never code, file contents or full prompts." font-family="Kalam, 'Comic Sans MS', cursive">
 <title>What agentic-advisor looks at: LinearB repo health, incidents and ticket; local git history on the files you touch; and your request. Effort is the highest of the three. Only the grade and its metadata are reported to your own LinearB org; never code, file contents or full prompts.</title>
+<rect width="100%" height="100%" rx="16" style="fill:var(--dg-canvas,#ffffff)"/>
 <text x="590.0" y="40.0" font-size="30" text-anchor="middle" style="fill:var(--fg,#0a0a0a)" font-weight="700"><tspan x="590.0" dy="0">What LinearB looks at before your agent writes code</tspan></text>
 <rect x="20.0" y="330.0" width="220.0" height="130.0" rx="10" style="fill:var(--attention-soft,#fef3e2)"/>
 <path d="M27.4 328.9 L128.8 328.6 L239.8 328.0 L240.1 394.9 L239.5 459.1 L129.7 460.9 L18.7 459.9 L20.2 393.4 L20.0 328.5 " style="fill:none;stroke:var(--attention,#b45309)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>

@@ -1,22 +1,25 @@
-<h1 align="center">LinearB Agent Plugins</h1>
-
 <p align="center">
-  <strong>Engineering context from LinearB, right inside your AI coding agent.</strong>
+  <a href="https://linear-b.github.io/agent-plugins/">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.svg">
+      <img src="docs/banner-light.svg" alt="LinearB Agent Plugins: engineering context from LinearB, right inside your AI coding agent" width="100%">
+    </picture>
+  </a>
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/linear-b/agent-plugins" alt="License: Apache-2.0"></a>
+  <a href="https://linear-b.github.io/agent-plugins/"><img src="https://img.shields.io/badge/website-linear--b.github.io%2Fagent--plugins-5467FF" alt="Website"></a>
+  <a href="plugins/agentic-advisor"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Flinear-b%2Fagent-plugins%2Fmain%2Fplugins%2Fagentic-advisor%2F.claude-plugin%2Fplugin.json&query=%24.version&label=agentic-advisor&color=383F48" alt="agentic-advisor version"></a>
   <a href="https://docs.claude.com/en/docs/claude-code/plugins"><img src="https://img.shields.io/badge/Claude%20Code-plugin%20marketplace-D97757?logo=claude&logoColor=white" alt="Claude Code plugin marketplace"></a>
-  <a href="plugins/agentic-advisor"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Flinear-b%2Fagent-plugins%2Fmain%2Fplugins%2Fagentic-advisor%2F.claude-plugin%2Fplugin.json&query=%24.version&label=agentic-advisor&color=4F46E5" alt="agentic-advisor version"></a>
-  <a href="https://github.com/linear-b/agent-plugins/commits/main"><img src="https://img.shields.io/github/last-commit/linear-b/agent-plugins" alt="Last commit"></a>
+  <a href="https://github.com/linear-b/agent-plugins/actions/workflows/ci-workflow.yml"><img src="https://github.com/linear-b/agent-plugins/actions/workflows/ci-workflow.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/linear-b/agent-plugins" alt="License: Apache-2.0"></a>
 </p>
 
 <p align="center">
+  <a href="https://linear-b.github.io/agent-plugins/"><strong>Website</strong></a> ·
   <a href="#quick-start">Quick start</a> ·
-  <a href="#plugins">Plugins</a> ·
   <a href="#how-it-works">How it works</a> ·
   <a href="#privacy--telemetry">Privacy</a> ·
-  <a href="https://linear-b.github.io/agent-plugins/">Docs</a> ·
   <a href="https://linear-b.github.io/agent-plugins/changelog/">Changelog</a> ·
   <a href="SECURITY.md">Security</a>
 </p>
@@ -27,9 +30,9 @@ AI agents write code the same way whether the target is a calm, well-tested modu
 
 ## Plugins
 
-| Plugin | What it does |
-| --- | --- |
-| [**agentic-advisor**](plugins/agentic-advisor) | Before writing code, grades how fragile the target is (LinearB rework, incidents and unreviewed merges, plus local git history on the files being touched) and holds the agent to a matching **LOW / MEDIUM / HIGH** effort level: lean on calm repos, defensive on fragile ones. |
+| Plugin | What it does | Docs |
+| --- | --- | --- |
+| [**agentic-advisor**](plugins/agentic-advisor) | Before writing code, grades how fragile the target is (LinearB rework, incidents and unreviewed merges, plus local git history on the files being touched) and holds the agent to a matching **LOW / MEDIUM / HIGH** effort level: lean on calm repos, defensive on fragile ones. | [Website](https://linear-b.github.io/agent-plugins/agentic-advisor/) · [README](plugins/agentic-advisor) |
 
 ## Quick start
 
@@ -48,9 +51,46 @@ export LINEARB_API_TOKEN="<your LinearB API token>"
 
 **3. Restart Claude Code** from that shell. Hooks and the skill read the environment at launch.
 
+<details>
+<summary><strong>Prefer one terminal command?</strong></summary>
+
+```sh
+claude plugin marketplace add linear-b/agent-plugins && claude plugin install agentic-advisor@linearb-ai
+```
+
+Then run `/reload-plugins` in Claude Code, or restart it if you just exported the token.
+</details>
+
+<details>
+<summary><strong>Rolling out to your whole org?</strong></summary>
+
+Admins can install and enable the plugin for every developer from **Claude.ai admin console → Claude Code → Managed settings**:
+
+```json
+{
+  "env": {
+    "LINEARB_API_TOKEN": "<token from LinearB > Settings > API Tokens>"
+  },
+  "extraKnownMarketplaces": {
+    "linearb-ai": {
+      "source": { "source": "github", "repo": "linear-b/agent-plugins" },
+      "autoUpdate": true
+    }
+  },
+  "enabledPlugins": {
+    "agentic-advisor@linearb-ai": true
+  }
+}
+```
+
+The token in managed settings is pushed to every developer's machine. Use a token created for this purpose, so you can rotate it on its own.
+</details>
+
 **Stay up to date:** third-party marketplaces don't auto-update by default. Enable it in `/plugin` → Marketplaces → `linearb-ai` → Enable auto-update, or run `claude plugin update agentic-advisor@linearb-ai` and restart. See the [changelog](https://linear-b.github.io/agent-plugins/changelog/) for what changed in each release.
 
-That's it. Start a code task (`fix the retry bug in billing/client.ts`) and the agent prints its verdict before it edits anything:
+## What you'll see
+
+Start a code task (`fix the retry bug in billing/client.ts`) and the agent prints its verdict before it edits anything:
 
 > LinearB: api-service — LOW effort (healthy: rework 0.4%, 0 unreviewed merges, no incidents).
 
@@ -58,25 +98,18 @@ That's it. Start a code task (`fix the retry bug in billing/client.ts`) and the 
 
 ## How it works
 
-```mermaid
-flowchart LR
-    A[Code task starts] --> B{Trivial edit?}
-    B -- yes --> L[LOW]
-    B -- no --> C[Repo health<br/>LinearB API]
-    C --> D[Task complexity<br/>from the prompt]
-    D --> H{Repo MEDIUM/HIGH or<br/>sensitive files?}
-    H -- yes --> E[Change area<br/>local git history]
-    H -- no --> F
-    E --> F[effort = highest axis]
-    F --> G[Agent works at that level]
-```
+<p align="center">
+  <a href="https://linear-b.github.io/agent-plugins/agentic-advisor/#how-it-decides">
+    <img src="docs/agentic-advisor/context.svg" alt="What agentic-advisor looks at: LinearB repo health, incidents and ticket; local git history on the files you touch; and your request. Effort is the highest of the three. Only the grade and its metadata are reported to your own LinearB org, never code or prompts." width="100%">
+  </a>
+</p>
 
 - **Repo health** comes from LinearB's public API: rework rate (bands match LinearB's own benchmark), unreviewed merges and recent incidents. It's cached per repo for 24 hours.
 - **Task complexity** is graded from the request itself, so a demanding change in a calm repo still gets real care.
 - **Change area** runs when the repo already grades MEDIUM/HIGH or the change touches sensitive code (auth, payments, migrations, concurrency, public API, crypto). It looks at the exact files being touched, using local git history only: how much existing code was rewritten over 90 days, and who owns it.
 - **It never blocks.** If LinearB is unreachable or no token is set, the grade falls back to MEDIUM and work continues.
 
-See the [plugin README](plugins/agentic-advisor) for triggers, the full grading rules and configuration.
+See the [plugin page](https://linear-b.github.io/agent-plugins/agentic-advisor/) for triggers, the full grading rules and configuration.
 
 ## Requirements
 

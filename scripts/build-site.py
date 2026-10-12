@@ -415,6 +415,8 @@ def render_home(root, market, plugins):
 def render_plugin(root, p):
     base = "../"
     lede, rest = split_readme(p["readme"])
+    # A README line pointing at this very page is for GitHub readers; drop it here.
+    rest = "\n".join(l for l in rest.splitlines() if "%s%s/)" % (SITE_URL, p["dir"]) not in l)
     link_base = "%s/blob/main/plugins/%s/" % (REPO_URL, p["dir"])
     body_html, toc = markdown(rest, link_base, p["path"], root)
     toc_html = "".join('<li><a href="#%s">%s</a></li>' % (h, t) for h, t in toc)
@@ -513,7 +515,7 @@ def render_feed(plugins):
 
 # LinearB "Buzz" design system (linweb): Outfit, slate primary, bright-blue brand, Buzz status colors.
 CSS = r"""
-:root{--dg-purple:#7c5cff;--dg-purple-soft:#f1ecff;--claude:#c4623f;--claude-btn:#d97757;--claude-soft:#fbeee8;--bg:#ffffff;--surface:#f5f6fa;--card:#ffffff;--fg:#0a0a0a;--primary:#383f48;--muted:#61656c;--line:#e4e4e7;
+:root{--dg-canvas:transparent;--dg-purple:#7c5cff;--dg-purple-soft:#f1ecff;--claude:#c4623f;--claude-btn:#d97757;--claude-soft:#fbeee8;--bg:#ffffff;--surface:#f5f6fa;--card:#ffffff;--fg:#0a0a0a;--primary:#383f48;--muted:#61656c;--line:#e4e4e7;
 --brand:#5467ff;--brand-strong:#1831f4;--brand-soft:#eef0ff;--on-brand:#ffffff;--code:#f1f2f6;
 --success:#15803d;--success-soft:#e7f6ec;--attention:#b45309;--attention-soft:#fef3e2;--destructive:#bf1245;--destructive-soft:#fce8ee;
 --font:"Outfit",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
