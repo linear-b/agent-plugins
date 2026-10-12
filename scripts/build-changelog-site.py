@@ -182,7 +182,7 @@ def render_feed(plugins):
     entries.sort(key=lambda e: e[0], reverse=True)
     return ('<?xml version="1.0" encoding="utf-8"?>\n'
             '<feed xmlns="http://www.w3.org/2005/Atom"><title>LinearB Agent Plugins changelog</title>'
-            '<id>%s</id><link href="%s"/><link rel="self" href="%sfeed.xml"/><updated>%sT00:00:00Z</updated>%s</feed>\n'
+            '<id>%s</id><author><name>LinearB</name></author><link href="%s"/><link rel="self" href="%sfeed.xml"/><updated>%sT00:00:00Z</updated>%s</feed>\n'
             % (SITE_URL, SITE_URL, SITE_URL, newest, "".join(e[1] for e in entries)))
 
 
@@ -305,7 +305,7 @@ footer{color:var(--muted);font-size:13px;border-top:1px solid var(--line);margin
     if(navigator.clipboard)navigator.clipboard.writeText(b.dataset.copy).then(done,function(){});}});
   // Relative dates, absolute on hover.
   var now=Date.now();document.querySelectorAll("time").forEach(function(el){
-    var d=Math.round((now-new Date(el.dateTime+"T00:00:00Z"))/864e5);if(isNaN(d)||d<0)return;
+    var d=Math.floor((now-new Date(el.dateTime+"T00:00:00Z"))/864e5);if(isNaN(d)||d<0)return;
     el.title=el.dateTime;el.textContent=d===0?"today":d===1?"yesterday":d<30?d+" days ago":el.dateTime});
   var links={};document.querySelectorAll("nav.side a").forEach(function(a){links[a.getAttribute("href").slice(1)]=a});
   // Search + kind filters.
