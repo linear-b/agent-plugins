@@ -32,7 +32,8 @@ for src in $(jq -r '.plugins[].source' "$ROOT/.claude-plugin/marketplace.json");
 done
 check "install popover has the one-line command" has "$W/site/agentic-advisor/index.html" 'claude plugin marketplace add linear-b/agent-plugins &amp;&amp; claude plugin install agentic-advisor@linearb-ai'
 check "install popover has the Claude prompt" has "$W/site/agentic-advisor/index.html" 'Install agentic-advisor for me'
-check "README diagram rendered as a diagram" has "$W/site/agentic-advisor/index.html" '<pre class="mermaid">'
+check "README diagram inlined with a phone layout" has "$W/site/agentic-advisor/index.html" '<figure class="figure has-tall">'
+check "diagram follows the site theme" has "$W/site/agentic-advisor/index.html" 'var(--brand-soft,#eef0ff)'
 check "README #anchors kept" has "$W/site/agentic-advisor/index.html" 'id="usage-telemetry-on-by-default"'
 
 # A plugin added to the marketplace appears with no code change; one without a CHANGELOG still builds;
@@ -54,10 +55,22 @@ Run `demo <x>` and see [docs](docs/guide.md), [shared](../shared.md), [root](/SE
 
 Literal {{CSS}} stays text.
 
+![flow](docs/flow.svg)
+
+![evil](docs/evil.svg)
+
+```mermaid
+flowchart LR
+  A --> B
+```
+
 | a | b |
 | --- | --- |
 | 1 | <img src=x onerror=alert(1)> |
 MD
+mkdir -p "$F/plugins/demo-tool/docs"
+printf '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10"/></svg>\n' > "$F/plugins/demo-tool/docs/flow.svg"
+printf '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><rect width="1" height="1"/></svg>\n' > "$F/plugins/demo-tool/docs/evil.svg"
 printf '# Changelog\n\n## [0.3.0] - 2026-10-01\n\n### Added\n\n- First release ([#1](https://github.com/o/r/pull/1))\n' > "$F/plugins/demo-tool/CHANGELOG.md"
 printf '{"name":"bare","version":"0.0.1"}\n' > "$F/plugins/bare/.claude-plugin/plugin.json"
 mkdir -p "$F/plugins/unlisted/.claude-plugin"
@@ -82,6 +95,10 @@ check "duplicate headings get unique ids" has "$P" 'id="setup-1"'
 check "literal {{CSS}} in a README not substituted" has "$P" 'Literal {{CSS}} stays text'
 check "unpublished plugin folder gets no page" test ! -e "$W/site2/unlisted/index.html"
 check "unpublished plugin not on the home page" lacks "$W/site2/index.html" 'unlisted@linearb-ai'
+check "README svg inlined" has "$P" '<figure class="figure"><svg class="wide"'
+check "svg with a handler is not inlined" lacks "$P" 'onload='
+check "svg with a handler falls back to an image" has "$P" 'plugins/demo-tool/docs/evil.svg?raw=1'
+check "mermaid block becomes a diagram" has "$P" '<pre class="mermaid">'
 check "PR link becomes a pill without parens" has "$W/site2/changelog/index.html" '<a class="pr" href="https://github.com/o/r/pull/1">#1</a>'
 
 echo "$pass passed, $fail failed"

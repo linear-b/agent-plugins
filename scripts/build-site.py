@@ -72,7 +72,17 @@ def inline(md, link_base=None):
         codes.append("<code>" + html.escape(m.group(1)) + "</code>")
         return "\x00%d\x00" % (len(codes) - 1)
 
+    def keep_img(m):
+        url = html.unescape(m.group(2))
+        if link_base and not re.match(r"^[a-z][a-z0-9+.-]*:", url, re.I):
+            url = urljoin(link_base, url) + "?raw=1"
+        elif not re.match(r"^https://", url):
+            return html.escape(m.group(1))
+        codes.append('<img src="%s" alt="%s" loading="lazy">' % (html.escape(url, quote=True), html.escape(m.group(1), quote=True)))
+        return "\x00%d\x00" % (len(codes) - 1)
+
     s = re.sub(r"`([^`]+)`", keep_code, md)
+    s = re.sub(r"!\[([^\]]*)\]\(([^)\s]+)\)", keep_img, s)
     s = html.escape(s)
 
     def link(m):
@@ -92,7 +102,27 @@ def inline(md, link_base=None):
     return re.sub(r"\x00(\d+)\x00", lambda m: codes[int(m.group(1))], s)
 
 
-def markdown(text, link_base=None):
+def figure(src, alt, src_dir, root):
+    """A README's own SVG, inlined so it takes the site's theme; a sibling <name>.tall.svg is the phone layout."""
+    if not src_dir or re.match(r"^[a-z][a-z0-9+.-]*:", src, re.I) or not src.endswith(".svg"):
+        return None
+    path = (src_dir / src).resolve()
+    if not path.is_file() or root.resolve() not in path.parents:
+        return None
+    out = []
+    for f, cls in ((path, "wide"), (path.with_name(path.stem + ".tall.svg"), "tall")):
+        if not f.is_file():
+            continue
+        svg = re.sub(r"<\?xml[^>]*>\s*", "", f.read_text())
+        if re.search(r"<script|<foreignObject|\son\w+\s*=|href\s*=", svg, re.I):
+            return None  # only plain drawings are inlined
+        if not re.search(r'<svg[^>]*\sclass="', svg):
+            svg = svg.replace("<svg ", '<svg class="%s" ' % cls, 1)
+        out.append(svg)
+    return '<figure class="figure%s">%s</figure>' % (" has-tall" if len(out) > 1 else "", "".join(out))
+
+
+def markdown(text, link_base=None, src_dir=None, root=None):
     """README subset -> (html, [(id, h2 text)]). Raw HTML lines are dropped, never passed through."""
     lines, out, toc, i = text.splitlines(), [], [], 0
     il = lambda s: inline(s, link_base)  # noqa: E731
@@ -171,6 +201,12 @@ def markdown(text, link_base=None):
             tag = "ol" if ordered else "ul"
             out.append("<%s>%s</%s>" % (tag, "".join("<li>%s</li>" % il(x) for x in items), tag))
             continue
+        m = re.match(r"^!\[([^\]]*)\]\(([^)\s]+)\)\s*$", line)
+        fig = m and figure(m.group(2), m.group(1), src_dir, root)
+        if fig:
+            out.append(fig)
+            i += 1
+            continue
         para = []
         while i < len(lines) and not (para and is_block_start(lines[i])):
             para.append(lines[i].strip())
@@ -206,6 +242,7 @@ def load_plugins(root):
         plugins.append({
             "name": entry["name"],
             "dir": d.name,
+            "path": d,
             "version": meta.get("version", ""),
             "description": entry.get("description") or meta.get("description", ""),
             "readme": readme.read_text() if readme.is_file() else "",
@@ -379,7 +416,7 @@ def render_plugin(root, p):
     base = "../"
     lede, rest = split_readme(p["readme"])
     link_base = "%s/blob/main/plugins/%s/" % (REPO_URL, p["dir"])
-    body_html, toc = markdown(rest, link_base)
+    body_html, toc = markdown(rest, link_base, p["path"], root)
     toc_html = "".join('<li><a href="#%s">%s</a></li>' % (h, t) for h, t in toc)
     recent = "".join(render_release(p, r, i == 0, base) for i, r in enumerate(p["releases"][:3]))
     body = """
@@ -400,8 +437,9 @@ def render_plugin(root, p):
            install=install_box("/plugin install %s@%s" % (p["name"], MARKETPLACE)), rollout=rollout([p["name"]]),
            pslug=slug(p["name"]), repo=REPO_URL, dir=p["dir"], body=body_html, recent=recent)
     head, scripts = "", ""
-    if 'class="mermaid"' in body_html:
+    if 'class="mermaid"' in body_html or 'class="figure' in body_html:
         head = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap">'
+    if 'class="mermaid"' in body_html:
         scripts = '<script src="%s" integrity="%s" crossorigin="anonymous"></script><script>%s</script>' % (
             MERMAID_JS[0], MERMAID_JS[1], DIAGRAM_JS)
     return page(root, "%s · LinearB Agent Plugins" % p["name"], p["description"], body, base, "plugin", [p["name"]], head, scripts)
@@ -470,15 +508,15 @@ def render_feed(plugins):
 
 # LinearB "Buzz" design system (linweb): Outfit, slate primary, bright-blue brand, Buzz status colors.
 CSS = r"""
-:root{--claude:#c4623f;--claude-btn:#d97757;--claude-soft:#fbeee8;--bg:#ffffff;--surface:#f5f6fa;--card:#ffffff;--fg:#0a0a0a;--primary:#383f48;--muted:#61656c;--line:#e4e4e7;
+:root{--dg-purple:#7c5cff;--dg-purple-soft:#f1ecff;--claude:#c4623f;--claude-btn:#d97757;--claude-soft:#fbeee8;--bg:#ffffff;--surface:#f5f6fa;--card:#ffffff;--fg:#0a0a0a;--primary:#383f48;--muted:#61656c;--line:#e4e4e7;
 --brand:#5467ff;--brand-strong:#1831f4;--brand-soft:#eef0ff;--on-brand:#ffffff;--code:#f1f2f6;
 --success:#16a34a;--success-soft:#e7f6ec;--attention:#b45309;--attention-soft:#fef3e2;--destructive:#bf1245;--destructive-soft:#fce8ee;
 --font:"Outfit",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 --radius:12px;color-scheme:light}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--claude:#e8957a;--claude-soft:#2a1d18;--bg:#0a0a0a;--surface:#111113;--card:#161618;--fg:#fafafa;--primary:#e4e4e7;--muted:#a1a1aa;--line:#262626;
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--dg-purple:#a18cff;--dg-purple-soft:#221a3d;--claude:#e8957a;--claude-soft:#2a1d18;--bg:#0a0a0a;--surface:#111113;--card:#161618;--fg:#fafafa;--primary:#e4e4e7;--muted:#a1a1aa;--line:#262626;
 --brand:#7c88ff;--brand-strong:#9aa3ff;--brand-soft:#1c1f45;--on-brand:#0a0a0a;--code:#1d1d21;
 --success:#4ade80;--success-soft:#11281a;--attention:#fbbf24;--attention-soft:#2e2209;--destructive:#fb7194;--destructive-soft:#331520;color-scheme:dark}}
-:root[data-theme="dark"]{--claude:#e8957a;--claude-soft:#2a1d18;--bg:#0a0a0a;--surface:#111113;--card:#161618;--fg:#fafafa;--primary:#e4e4e7;--muted:#a1a1aa;--line:#262626;
+:root[data-theme="dark"]{--dg-purple:#a18cff;--dg-purple-soft:#221a3d;--claude:#e8957a;--claude-soft:#2a1d18;--bg:#0a0a0a;--surface:#111113;--card:#161618;--fg:#fafafa;--primary:#e4e4e7;--muted:#a1a1aa;--line:#262626;
 --brand:#7c88ff;--brand-strong:#9aa3ff;--brand-soft:#1c1f45;--on-brand:#0a0a0a;--code:#1d1d21;
 --success:#4ade80;--success-soft:#11281a;--attention:#fbbf24;--attention-soft:#2e2209;--destructive:#fb7194;--destructive-soft:#331520;color-scheme:dark}
 *{box-sizing:border-box}
@@ -575,7 +613,7 @@ section+section{margin-top:56px}
 .doc-hero h1,.intro h1{font-size:clamp(32px,4vw,44px);margin:0;font-weight:600}
 .doc-hero .lede{margin-top:12px}
 .intro .lede{margin-top:8px}
-.prose>*{max-width:76ch}.prose>.diagram,.prose>.table{max-width:none}
+.prose>*{max-width:76ch}.prose>.diagram,.prose>.table,.prose>.figure{max-width:none}
 .prose h2{font-size:26px;margin:44px 0 12px;padding-top:4px}
 .prose h3{font-size:19px;margin:28px 0 8px}
 .prose p,.prose li{color:var(--fg)}
@@ -602,6 +640,10 @@ th{background:var(--surface);font-weight:600}tr:last-child td{border-bottom:0}
 details.team{margin-top:14px;max-width:760px}
 details.team summary{cursor:pointer;color:var(--brand-strong);font-weight:500;width:max-content}
 details.team .rollout{grid-template-columns:minmax(0,1fr)}
+.figure{margin:24px 0}.figure svg{display:block;width:100%;height:auto}
+.figure .tall{display:none;max-width:600px;margin:0 auto}
+@media (max-width:700px){.figure.has-tall .wide{display:none}.figure.has-tall .tall{display:block}}
+.prose img{max-width:100%;height:auto}
 .recent{margin-top:56px}.recent h2{font-size:26px;margin:0 0 18px}
 /* changelog */
 .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:24px 0}

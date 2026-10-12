@@ -9,6 +9,7 @@ on:
       - plugins/*/CHANGELOG.md
       - plugins/*/README.md
       - site/**
+      - docs/**
       - plugins/*/.claude-plugin/plugin.json
       - .claude-plugin/marketplace.json
       - scripts/build-site.py
