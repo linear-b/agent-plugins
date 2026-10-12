@@ -96,7 +96,9 @@ class Pen:
 
     def svg(self, w, h, title, cls):
         return ('<svg xmlns="http://www.w3.org/2000/svg" class="%s" viewBox="0 0 %d %d" role="img" '
-                'aria-label="%s" font-family="Kalam, \'Comic Sans MS\', cursive">\n<title>%s</title>\n%s\n</svg>\n'
+                'aria-label="%s" font-family="Kalam, \'Comic Sans MS\', cursive">\n<title>%s</title>\n'
+                # White card on GitHub (readable in its dark mode); transparent on the site.
+                '<rect width="100%%" height="100%%" rx="16" style="fill:var(--dg-canvas,#ffffff)"/>\n%s\n</svg>\n'
                 % (cls, w, h, escape(title, quote=True), escape(title), "\n".join(self.out)))
 
 
