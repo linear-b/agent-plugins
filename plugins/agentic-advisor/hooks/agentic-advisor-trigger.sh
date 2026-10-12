@@ -134,7 +134,7 @@ case "$event" in
     set_marker "${cwd:-.}"
     [ -f "$marker" ] && exit 0
     emit "UserPromptSubmit" "$msg"
-    why="code-task keywords"; [ -n "$ticket" ] && why="ticket $ticket"
+    why="code-task keywords"; [ -n "$ticket" ] && why="ticket key"   # the key itself came from the prompt
     dbg "UserPromptSubmit: nudged the agent to run the skill ($why)"
     ;;
 
