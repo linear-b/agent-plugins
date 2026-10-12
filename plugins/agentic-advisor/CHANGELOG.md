@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.0] - 2026-10-12
+
+### Changed
+
+- The troubleshooting log is now on by default, so a missing event can be diagnosed without asking the user to re-run anything. Turn it off with `LINEARB_DEBUG=0`. It stays local and private (0600), rotates at 1 MB, and never contains the token, prompt or payload.
+- The log now covers the trigger hook too: when it nudged the agent to run the skill, and when it held a tool call for the grade or the verdict line.
+- Every line starts with the plugin version.
+
+### Added
+
+- Errors are logged with their reason: network failures with curl's exit code and message, and rejected events (4xx/5xx) with the server's response, emails redacted.
+
 ## [1.2.0] - 2026-10-11
 
 ### Added
