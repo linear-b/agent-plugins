@@ -187,9 +187,10 @@ post() { # $1 = payload json, $2 = short description for the debug log
         -H @- -H "Content-Type: application/json" \
         --data-binary @"$pf" <<<"x-api-key: $token" 2>"$pf.err")"; rc=$?
       why=""
-      # Network failures carry curl's reason; 4xx/5xx carry the server's (emails redacted).
-      if [ "$rc" -ne 0 ]; then why=" (curl exit $rc: $(head -c 200 "$pf.err" 2>/dev/null | tr -d '\n' | redact))"
-      elif [ "${code:-0}" -ge 400 ] 2>/dev/null; then why=" (response: $(head -c 300 "$pf.out" 2>/dev/null | tr -d '\n' | redact))"; fi
+      # Network failures carry curl's reason; 4xx/5xx carry the server's. Redact before cutting,
+      # so a cut can't leave half an email behind.
+      if [ "$rc" -ne 0 ]; then why=" (curl exit $rc: $(head -c 4096 "$pf.err" 2>/dev/null | tr -d '\n' | redact | cut -c1-200))"
+      elif [ "${code:-0}" -ge 400 ] 2>/dev/null; then why=" (response: $(head -c 4096 "$pf.out" 2>/dev/null | tr -d '\n' | redact | cut -c1-300))"; fi
       rm -f "$pf" "$pf.out" "$pf.err"
       dbg "$event: sent ${2:-event} -> HTTP ${code:-none} to ${API_URL%/}$why" ) & ) 2>/dev/null || true
 }
