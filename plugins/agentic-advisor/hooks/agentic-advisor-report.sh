@@ -39,9 +39,9 @@
 #
 # Env: LINEARB_API_TOKEN — required to report; without it this is a silent no-op.
 #      LINEARB_TELEMETRY — set to 0 (or false/off/no) to disable reporting.
-#      LINEARB_DEBUG — set to 1 to log each outcome (skip reason, or HTTP status with the
-#      grade and repo name for sent events) to ${XDG_CACHE_HOME:-~/.cache}/agentic-advisor/report.log. Never logs the token,
-#      email, prompt or payload.
+#      LINEARB_DEBUG — on by default; set to 0 to stop logging each outcome (skip reason, HTTP
+#      status or error, with grade and repo for sent events) to ${XDG_CACHE_HOME:-~/.cache}/agentic-advisor/report.log.
+#      Never logs the token, prompt or payload.
 #      LINEARB_API_URL — API base URL (default https://public-api.linearb.io); set it
 #      for on-prem or regional LinearB deployments.
 #      LINEARB_BASELINE_HOLDOUT_PCT (default 0 — disabled) — % of sessions withheld as a no-grade
@@ -49,27 +49,9 @@
 
 set -uo pipefail
 
-# Opt-in troubleshooting log (LINEARB_DEBUG=1): one line per outcome, no secrets or payloads.
-dbg() {
-  [ "${LINEARB_DEBUG:-}" = "1" ] || return 0
-  [ -n "${XDG_CACHE_HOME:-}${HOME:-}" ] || return 0
-  local d="${XDG_CACHE_HOME:-${HOME:-}/.cache}/agentic-advisor" f
-  (umask 077; mkdir -p "$d") 2>/dev/null
-  # Private before every write: an owned real dir we can make 0700 (then no one else can swap
-  # entries in it), and only a regular owned log, made 0600 before it's rotated or appended to.
-  if [ -L "$d" ] || [ ! -d "$d" ] || [ ! -O "$d" ]; then return 0; fi
-  chmod 700 "$d" 2>/dev/null || return 0
-  f="$d/report.log"   # rotated at ~1 MB so a forgotten LINEARB_DEBUG=1 can't grow it forever
-  if [ -L "$f" ] || { [ -e "$f" ] && { [ ! -f "$f" ] || [ ! -O "$f" ]; }; }; then return 0; fi
-  if [ -f "$f" ]; then chmod 600 "$f" 2>/dev/null || return 0; fi
-  if [ -f "$f" ] && [ "$(wc -c < "$f")" -gt 1048576 ] 2>/dev/null; then
-    # Never rotate into a directory or through a planted symlink: clear .old first, give up if it stays.
-    rm -f "$f.old" 2>/dev/null
-    if [ -e "$f.old" ] || [ -L "$f.old" ]; then return 0; fi
-    mv -f "$f" "$f.old" 2>/dev/null || return 0
-  fi
-  (umask 077; printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$f") 2>/dev/null || true
-}
+# Troubleshooting log (on by default, LINEARB_DEBUG=0 turns it off). A missing log.sh only loses the log.
+# shellcheck disable=SC1091  # log.sh sits next to this script
+. "$(dirname "${BASH_SOURCE[0]:-$0}")/log.sh" 2>/dev/null || { dbg() { :; }; redact() { cat; }; }
 
 API_URL="${LINEARB_API_URL:-https://public-api.linearb.io}"
 REPORT_URL="${API_URL%/}/api/v1/report/metric"
@@ -128,7 +110,7 @@ touch "$state" 2>/dev/null || true
 # per-turn Stop that has nothing new to report costs only a grep or two, not a full
 # transcript parse. (The whole graded path requires the skill to have actually run.)
 if [ "$label" = "graded" ]; then
-  grep -qE '"skill"[[:space:]]*:[[:space:]]*"[^"]*agentic-advisor[^"]*"' "$transcript" 2>/dev/null || { dbg "$event: skip: skill has not run in this session"; exit 0; }
+  grep -qE '"skill"[[:space:]]*:[[:space:]]*"[^"]*agentic-advisor[^"]*"' "$transcript" 2>/dev/null || { [ "$event" = "SessionEnd" ] && dbg "SessionEnd: skip: skill never ran in this session"; exit 0; }
   if [ "$event" = "Stop" ]; then
     # Has the set of verdict lines changed since we last processed a Stop? SKILL.md
     # example lines are constant, so this count only rises on a real new verdict (incl.
@@ -198,12 +180,17 @@ post() { # $1 = payload json, $2 = short description for the debug log
   # curl in a fully backgrounded subshell (reparented to init) — the POST completes
   # even after the hook returns and the session process is gone.
   # Token on stdin (-H @-), payload from a private temp file: neither is in curl's argv.
-  local pf; pf="$(umask 077; mktemp "$marker_dir/payload.XXXXXX" 2>/dev/null)" || return 0
-  printf '%s' "$1" > "$pf" || { rm -f "$pf"; return 0; }
-  ( ( code="$(curl -sS -m 5 -o /dev/null -w '%{http_code}' -X POST "$REPORT_URL" \
+  local pf; pf="$(umask 077; mktemp "$marker_dir/payload.XXXXXX" 2>/dev/null)" || { dbg "$event: error: no temp file for ${2:-event}"; return 0; }
+  printf '%s' "$1" > "$pf" || { rm -f "$pf"; dbg "$event: error: could not write ${2:-event}"; return 0; }
+  ( ( code="$(curl -sS -m 5 -o "$pf.out" -w '%{http_code}' -X POST "$REPORT_URL" \
         -H @- -H "Content-Type: application/json" \
-        --data-binary @"$pf" <<<"x-api-key: $token" 2>/dev/null)"; rm -f "$pf"
-      dbg "$event: sent ${2:-event} -> HTTP ${code:-none}" ) & ) 2>/dev/null || true
+        --data-binary @"$pf" <<<"x-api-key: $token" 2>"$pf.err")"; rc=$?
+      why=""
+      # Network failures carry curl's reason; 4xx/5xx carry the server's (emails redacted).
+      if [ "$rc" -ne 0 ]; then why=" (curl exit $rc: $(head -c 200 "$pf.err" 2>/dev/null | tr -d '\n' | redact))"
+      elif [ "${code:-0}" -ge 400 ] 2>/dev/null; then why=" (response: $(head -c 300 "$pf.out" 2>/dev/null | tr -d '\n' | redact))"; fi
+      rm -f "$pf" "$pf.out" "$pf.err"
+      dbg "$event: sent ${2:-event} -> HTTP ${code:-none} to ${API_URL%/}$why" ) & ) 2>/dev/null || true
 }
 
 # Transcript parse -> token windows + flags, in one pass. Run lazily (only once we know
@@ -312,6 +299,7 @@ if [ "$label" = "baseline" ]; then
         (if $contam == "true" then {contaminated: "true"}    else {} end)
       )
     }' 2>/dev/null)"
+  [ -n "$payload" ] || { dbg "SessionEnd: error: could not build baseline beacon"; exit 0; }
   post "$payload" "baseline beacon"
   printf '%s\n' "$key" >> "$state" 2>/dev/null || true
   exit 0
@@ -383,7 +371,7 @@ report_decisions() {
           (if $backfill != "" then {backfill: $backfill}        else {} end)
         )
       }' 2>/dev/null)"
-    [ -n "$payload" ] || continue
+    [ -n "$payload" ] || { dbg "$event: error: could not build decision $veffort ($vrepo)"; continue; }
     post "$payload" "decision $veffort ($vrepo)${backfill:+ backfill}"
     printf '%s\n' "$key" >> "$state" 2>/dev/null || true
   done <<< "$verdicts"
@@ -424,7 +412,7 @@ payload="$(jq -n \
       (if $pver   != "" then {plugin_version: $pver} else {} end)
     )
   }' 2>/dev/null)"
-[ -n "$payload" ] || exit 0
+[ -n "$payload" ] || { dbg "SessionEnd: error: could not build tokens event"; exit 0; }
 post "$payload" "tokens $veffort ($vrepo)"
 printf '%s\n' "$key" >> "$state" 2>/dev/null || true
 exit 0

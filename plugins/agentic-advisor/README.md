@@ -90,4 +90,13 @@ Then **launch Claude Code from a shell that has it exported** (hooks and the ski
 
 ## Troubleshooting
 
-Reporting is silent by design, so a missing event shows no error. To see what happened, `export LINEARB_DEBUG=1`, relaunch Claude Code, run one code task, and check `${XDG_CACHE_HOME:-~/.cache}/agentic-advisor/report.log` (rotated to `report.log.old` at 1 MB). Each line gives the outcome: a skip reason (for example `LINEARB_API_TOKEN not set in this session`) or the HTTP status of a sent event (`200` = recorded, `401`/`403` = bad token, `422` = rejected payload). Lines for sent events include the grade and repo name; no line contains your token, email, prompt or the payload, and the log is private to your user (0600).
+Reporting is silent in the session by design, so the plugin keeps a local log instead: `${XDG_CACHE_HOME:-~/.cache}/agentic-advisor/report.log` (rotated to `report.log.old` at 1 MB). It's on by default; turn it off with `export LINEARB_DEBUG=0`.
+
+Each line starts with the time and plugin version, then one outcome:
+
+- **Trigger:** when it nudged the agent to run the skill (and why: a ticket key or code-task keywords), and when it held a tool call until the grade or the verdict line existed.
+- **Skipped report:** the reason, for example `LINEARB_API_TOKEN not set in this session`, `no git remote resolved` or `skill never ran in this session`.
+- **Sent event:** the grade, repo and HTTP status: `200` = recorded, `401`/`403` = bad token, `422` = rejected payload (with the server's reason).
+- **Error:** network failures with curl's reason (for example `Could not resolve host`), or a payload that couldn't be built.
+
+No line contains your token, prompt or the payload; emails in server responses are redacted. The log is private to your user (folder 0700, file 0600).

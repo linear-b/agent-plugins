@@ -125,7 +125,7 @@ See the [plugin page](https://linear-b.github.io/agent-plugins/agentic-advisor/)
 | `LINEARB_API_TOKEN` | *(none)* | LinearB org API token. Used to read health signals and to report usage. |
 | `LINEARB_API_URL` | `https://public-api.linearb.io` | Point at a regional or on-prem LinearB API. |
 | `LINEARB_TELEMETRY` | `1` | Set to `0` to turn off usage reporting. Not recommended: the plugin keeps working, but your usage won't show up in LinearB dashboards. |
-| `LINEARB_DEBUG` | *(off)* | Set to `1` to log each report's outcome (skip reason or HTTP status) to `${XDG_CACHE_HOME:-~/.cache}/agentic-advisor/report.log` (rotated to `report.log.old` at 1 MB), for troubleshooting. Lines for sent events include the grade and repo name; no line contains the token, email, prompt or payload. |
+| `LINEARB_DEBUG` | `1` | Local troubleshooting log at `${XDG_CACHE_HOME:-~/.cache}/agentic-advisor/report.log` (rotated at 1 MB): trigger nudges, each report's outcome (skip reason, HTTP status, or error with its reason). Set to `0` to turn it off. No line contains the token, prompt or payload. |
 
 ## Privacy & telemetry
 

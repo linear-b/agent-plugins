@@ -23,8 +23,12 @@
 
 set -uo pipefail
 
-# jq parses the hook payload; without it, no-op silently.
-command -v jq >/dev/null 2>&1 || exit 0
+# Troubleshooting log (on by default, LINEARB_DEBUG=0 turns it off). A missing log.sh only loses the log.
+# shellcheck disable=SC1091  # log.sh sits next to this script
+. "$(dirname "${BASH_SOURCE[0]:-$0}")/log.sh" 2>/dev/null || dbg() { :; }
+
+# jq parses the hook payload; without it, no-op.
+command -v jq >/dev/null 2>&1 || { dbg "trigger: skip: jq not found, the skill is never nudged"; exit 0; }
 
 # sha1 helper — shasum is macOS-only; sha1sum is the GNU/Linux name. Portable across both.
 sha1() { if command -v shasum >/dev/null 2>&1; then shasum; elif command -v sha1sum >/dev/null 2>&1; then sha1sum; fi | cut -c1-16; }
@@ -100,7 +104,10 @@ if [ -n "$session_id" ] && [ "${BASELINE_PCT:-0}" -gt 0 ] 2>/dev/null; then
   bkt_hash="$(printf '%s' "$session_id" | sha1 | cut -c1-8)"
   if [ -n "$bkt_hash" ]; then
     bkt=$(( 0x$bkt_hash % 100 ))
-    [ "$bkt" -lt "$BASELINE_PCT" ] && exit 0   # baseline: silent, no nudge
+    if [ "$bkt" -lt "$BASELINE_PCT" ]; then   # baseline: silent, no nudge
+      [ "$event" = "UserPromptSubmit" ] && dbg "UserPromptSubmit: skip: baseline (holdout) session, no nudge"
+      exit 0
+    fi
   fi
 fi
 
@@ -127,6 +134,8 @@ case "$event" in
     set_marker "${cwd:-.}"
     [ -f "$marker" ] && exit 0
     emit "UserPromptSubmit" "$msg"
+    why="code-task keywords"; [ -n "$ticket" ] && why="ticket $ticket"
+    dbg "UserPromptSubmit: nudged the agent to run the skill ($why)"
     ;;
 
   PreToolUse)
@@ -139,7 +148,7 @@ case "$event" in
       vdone="$marker_dir/${session_id:-default}.${runs:-0}.vdone"
       if [ ! -f "$vdone" ]; then
         state="$(verdict_state)"
-        [ -n "$state" ] && : > "$vdone" 2>/dev/null && [ "$state" = "pending" ] && deny "LinearB: one quick step first — record this session's effort grade by running: printf '%s\\n' '> LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan>' (the grade is only recorded from that line, not from thinking). Then retry this same call; it won't pause again."
+        [ -n "$state" ] && : > "$vdone" 2>/dev/null && [ "$state" = "pending" ] && dbg "PreToolUse: held one tool call until the verdict line is printed" && deny "LinearB: one quick step first — record this session's effort grade by running: printf '%s\\n' '> LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan>' (the grade is only recorded from that line, not from thinking). Then retry this same call; it won't pause again."
       fi
     fi
     tool="$(jq -r '.tool_name // empty' <<<"$input" 2>/dev/null || true)"
@@ -183,6 +192,7 @@ case "$event" in
     # prefix) and feeds that reason to the model. FAIL OPEN if we can't record the
     # marker (don't wedge).
     : > "$held" 2>/dev/null || exit 0
+    dbg "PreToolUse: held the first edit until the skill runs"
     reason="One quick first step before this edit: run the \`agentic-advisor\` skill to grade this repo's effort (just this once per repo, this session). Print its verdict line (> LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (…) — …), then make the same edit again — it'll go right through, and later edits won't pause. If LinearB isn't available it just defaults to MEDIUM."
     deny "$reason"
     ;;
