@@ -2,13 +2,14 @@
 """Build the GitHub Pages site: home, one page per plugin, changelog, Atom feed.
 
 Usage: scripts/build-site.py [out_dir] [repo_root]   (defaults: _site, this repo)
-Every plugins/<name>/ with a .claude-plugin/plugin.json gets a page from its README.md;
+Every plugin listed in .claude-plugin/marketplace.json gets a page from its README.md;
 its CHANGELOG.md feeds the changelog. Standard library only.
 """
 import html
 import json
 import re
 import sys
+from urllib.parse import urljoin
 from pathlib import Path
 
 SITE_URL = "https://linear-b.github.io/agent-plugins/"
@@ -79,7 +80,7 @@ def inline(md, link_base=None):
         if url.startswith("#"):
             pass
         elif link_base and not re.match(r"^[a-z][a-z0-9+.-]*:", url, re.I):
-            url = link_base + url.lstrip("./")
+            url = (REPO_URL + "/blob/main" + url) if url.startswith("/") else urljoin(link_base, url)
         elif not re.match(r"^https?://", url):
             return m.group(0)
         cls = ' class="pr"' if re.fullmatch(r"#\d+", text) else ""
@@ -95,6 +96,7 @@ def markdown(text, link_base=None):
     """README subset -> (html, [(id, h2 text)]). Raw HTML lines are dropped, never passed through."""
     lines, out, toc, i = text.splitlines(), [], [], 0
     il = lambda s: inline(s, link_base)  # noqa: E731
+    seen = {}
 
     def is_block_start(l):
         return (not l.strip() or l.startswith(("#", ">", "|", "```", "<"))
@@ -122,6 +124,10 @@ def markdown(text, link_base=None):
         if m:
             level, title = len(m.group(1)), m.group(2)
             hid = gh_slug(title)
+            n = seen.get(hid, 0)
+            seen[hid] = n + 1
+            if n:
+                hid = "%s-%d" % (hid, n)
             if level == 2:
                 toc.append((hid, re.sub(r"<[^>]+>", "", il(title))))
             out.append('<h%d id="%s">%s</h%d>' % (level, hid, il(title), level))
@@ -187,21 +193,21 @@ def split_readme(text):
 
 
 def load_plugins(root):
+    """Only plugins the marketplace publishes, so every install command on the site works."""
     market = json.loads((root / ".claude-plugin/marketplace.json").read_text())
-    short = {p["name"]: p.get("description", "") for p in market.get("plugins", [])}
     plugins = []
-    for d in sorted((root / "plugins").iterdir()):
+    for entry in market.get("plugins", []):
+        d = (root / entry.get("source", "")).resolve()
         manifest = d / ".claude-plugin/plugin.json"
         if not manifest.is_file():
             continue
         meta = json.loads(manifest.read_text())
-        name = meta["name"]
         cl, readme = d / "CHANGELOG.md", d / "README.md"
         plugins.append({
-            "name": name,
+            "name": entry["name"],
             "dir": d.name,
             "version": meta.get("version", ""),
-            "description": short.get(name) or meta.get("description", ""),
+            "description": entry.get("description") or meta.get("description", ""),
             "readme": readme.read_text() if readme.is_file() else "",
             "releases": parse_changelog(cl.read_text()) if cl.is_file() else [],
         })
@@ -276,17 +282,10 @@ def page(root, title, desc, body, base, active, extra_head="", scripts=""):
     nav = [("Plugins", base + "#plugins", "plugins"), ("Changelog", base + "changelog/", "changelog")]
     links = "".join('<a href="%s"%s>%s</a>' % (h, ' aria-current="page"' if k == active else "", t)
                     for t, h, k in nav)
-    return (SHELL.replace("{{TITLE}}", html.escape(title))
-            .replace("{{DESC}}", html.escape(desc, quote=True))
-            .replace("{{BASE}}", base)
-            .replace("{{LOGO}}", logo(root))
-            .replace("{{NAV}}", links)
-            .replace("{{HEAD}}", extra_head)
-            .replace("{{BODY}}", body)
-            .replace("{{SCRIPTS}}", scripts)
-            .replace("{{REPO}}", REPO_URL)
-            .replace("{{CSS}}", CSS)
-            .replace("{{JS}}", JS))
+    fill = {"TITLE": html.escape(title), "DESC": html.escape(desc, quote=True), "BASE": base, "LOGO": logo(root),
+            "NAV": links, "HEAD": extra_head, "BODY": body, "SCRIPTS": scripts, "REPO": REPO_URL, "CSS": CSS, "JS": JS}
+    # One pass, so a literal "{{...}}" inside README content is never substituted.
+    return re.sub(r"\{\{([A-Z]+)\}\}", lambda m: fill[m.group(1)], SHELL)
 
 
 def render_home(root, market, plugins):
@@ -361,7 +360,7 @@ def render_plugin(root, p):
   <section class="recent"><h2 id="recent-releases">Recent releases</h2><div class="timeline">{recent}</div>
   <a href="../changelog/#{pslug}">All releases →</a></section>
 </article></div>
-""".format(toc=toc_html, name=html.escape(p["name"]), ver=html.escape(p["version"]), lede=inline(lede),
+""".format(toc=toc_html, name=html.escape(p["name"]), ver=html.escape(p["version"]), lede=inline(lede, link_base),
            install=install_box("/plugin install %s@%s" % (p["name"], MARKETPLACE)), rollout=rollout([p["name"]]),
            pslug=slug(p["name"]), repo=REPO_URL, dir=p["dir"], body=body_html, recent=recent)
     head, scripts = "", ""
