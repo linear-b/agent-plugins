@@ -1,4 +1,4 @@
-name: Changelog site
+name: Site
 
 on:
   workflow_dispatch:
@@ -7,9 +7,11 @@ on:
       - main
     paths:
       - plugins/*/CHANGELOG.md
+      - plugins/*/README.md
+      - site/**
       - plugins/*/.claude-plugin/plugin.json
       - .claude-plugin/marketplace.json
-      - scripts/build-changelog-site.py
+      - scripts/build-site.py
 
 permissions:
   contents: read
@@ -27,8 +29,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Build site from CHANGELOGs
-        run: scripts/build-changelog-site.py _site
+      - name: Build site
+        run: scripts/build-site.py _site
 
       - uses: actions/upload-pages-artifact@v5
         with:

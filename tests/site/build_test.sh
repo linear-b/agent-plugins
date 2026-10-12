@@ -1,39 +1,71 @@
 #!/usr/bin/env bash
-# Changelog site: builds from the real CHANGELOGs, every release shows up, markup is escaped.
+# Site: builds from the real repo, every plugin gets a page and every release shows up, a new plugin
+# is picked up with no code change, and markup in READMEs/CHANGELOGs is escaped.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+BUILD="$ROOT/scripts/build-site.py"
 pass=0; fail=0
 check() {
   local name=$1; shift
   if "$@"; then pass=$((pass+1)); printf 'ok   %s\n' "$name"; else fail=$((fail+1)); printf 'FAIL %s\n' "$name"; fi
 }
+has() { grep -qF -- "$2" "$1"; }
+lacks() { ! has "$1" "$2"; }
 
 W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT
-"$ROOT/scripts/build-changelog-site.py" "$W/site" >/dev/null
-check "index.html built" test -s "$W/site/index.html"
-check "feed.xml is valid XML" python3 -c "import sys,xml.dom.minidom; xml.dom.minidom.parse(sys.argv[1])" "$W/site/feed.xml"
 
-for cl in "$ROOT"/plugins/*/CHANGELOG.md; do
-  name="$(basename "$(dirname "$cl")")"
-  while read -r v; do
-    check "$name $v on the page" grep -qF "id=\"$name-v${v//./-}\"" "$W/site/index.html"
-  done < <(sed -n 's/^## \[\([^]]*\)\].*/\1/p' "$cl")
+# The real repo.
+"$BUILD" "$W/site" >/dev/null
+for f in index.html changelog/index.html feed.xml assets/linearb-logo.svg .nojekyll; do
+  check "built $f" test -e "$W/site/$f"
 done
+check "feed.xml is valid XML" python3 -c "import sys,xml.dom.minidom; xml.dom.minidom.parse(sys.argv[1])" "$W/site/feed.xml"
+for d in "$ROOT"/plugins/*/; do
+  name="$(basename "$d")"
+  check "$name has a page" test -s "$W/site/$name/index.html"
+  check "$name is on the home page" has "$W/site/index.html" "href=\"$name/\""
+  check "$name managed settings enable it" has "$W/site/$name/index.html" "&quot;$name@linearb-ai&quot;: true"
+  while read -r v; do
+    check "$name $v in the changelog" has "$W/site/changelog/index.html" "id=\"$name-v${v//./-}\""
+  done < <(sed -n 's/^## \[\([^]]*\)\].*/\1/p' "$d/CHANGELOG.md")
+done
+check "README diagram rendered as a diagram" has "$W/site/agentic-advisor/index.html" '<pre class="mermaid">'
+check "README #anchors kept" has "$W/site/agentic-advisor/index.html" 'id="usage-telemetry-on-by-default"'
 
-# Inline rendering: code and links render, raw HTML in an entry is escaped, non-http links stay text.
-cat > "$W/inline.py" <<'PY'
-import importlib.util, sys
-s = importlib.util.spec_from_file_location("b", sys.argv[1]); b = importlib.util.module_from_spec(s); s.loader.exec_module(b)
-print(b.inline("use `<x>` and <script>alert(1)</script> ([#7](https://github.com/o/r/pull/7)) [bad](javascript:alert(1))"))
-PY
-out="$(python3 "$W/inline.py" "$ROOT/scripts/build-changelog-site.py")"
-has() { grep -qF -- "$1" <<<"$out"; }
-lacks() { ! has "$1"; }
-check "code span escaped" has '<code>&lt;x&gt;</code>'
-check "raw html escaped" lacks '<script>'
-check "PR link becomes a pill without parens" has '<a class="pr" href="https://github.com/o/r/pull/7">#7</a>'
-check "javascript: link not linked" lacks 'href="javascript'
+# A second plugin appears with no code change; a plugin without a CHANGELOG still gets a page.
+F="$W/repo"; mkdir -p "$F"
+cp -R "$ROOT/.claude-plugin" "$ROOT/plugins" "$ROOT/site" "$F/"
+mkdir -p "$F/plugins/demo-tool/.claude-plugin" "$F/plugins/bare/.claude-plugin"
+printf '{"name":"demo-tool","version":"0.3.0","description":"Demo plugin."}\n' > "$F/plugins/demo-tool/.claude-plugin/plugin.json"
+cat > "$F/plugins/demo-tool/README.md" <<'MD'
+# demo-tool
+
+Does a demo thing <script>alert(1)</script>.
+
+## Setup
+
+Run `demo <x>` and see [docs](docs/guide.md) or [bad](javascript:alert(1)).
+
+| a | b |
+| --- | --- |
+| 1 | <img src=x onerror=alert(1)> |
+MD
+printf '# Changelog\n\n## [0.3.0] - 2026-10-01\n\n### Added\n\n- First release ([#1](https://github.com/o/r/pull/1))\n' > "$F/plugins/demo-tool/CHANGELOG.md"
+printf '{"name":"bare","version":"0.0.1"}\n' > "$F/plugins/bare/.claude-plugin/plugin.json"
+"$BUILD" "$W/site2" "$F" >/dev/null
+P="$W/site2/demo-tool/index.html"
+check "new plugin gets a page" test -s "$P"
+check "new plugin on the home page" has "$W/site2/index.html" 'href="demo-tool/"'
+check "new plugin in the changelog" has "$W/site2/changelog/index.html" 'id="demo-tool-v0-3-0"'
+check "new plugin in home managed settings" has "$W/site2/index.html" '&quot;demo-tool@linearb-ai&quot;: true'
+check "plugin without README/CHANGELOG still builds" test -s "$W/site2/bare/index.html"
+check "README raw html escaped" lacks "$P" '<script>alert'
+check "table cell html escaped" lacks "$P" '<img src=x'
+check "code span escaped" has "$P" '<code>demo &lt;x&gt;</code>'
+check "relative link points at the repo" has "$P" 'href="https://github.com/linear-b/agent-plugins/blob/main/plugins/demo-tool/docs/guide.md"'
+check "javascript: link not linked" lacks "$P" 'href="javascript'
+check "PR link becomes a pill without parens" has "$W/site2/changelog/index.html" '<a class="pr" href="https://github.com/o/r/pull/1">#1</a>'
 
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

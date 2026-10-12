@@ -16,7 +16,8 @@
   <a href="#plugins">Plugins</a> ·
   <a href="#how-it-works">How it works</a> ·
   <a href="#privacy--telemetry">Privacy</a> ·
-  <a href="https://linear-b.github.io/agent-plugins/">Changelog</a> ·
+  <a href="https://linear-b.github.io/agent-plugins/">Docs</a> ·
+  <a href="https://linear-b.github.io/agent-plugins/changelog/">Changelog</a> ·
   <a href="SECURITY.md">Security</a>
 </p>
 
@@ -47,7 +48,7 @@ export LINEARB_API_TOKEN="<your LinearB API token>"
 
 **3. Restart Claude Code** from that shell. Hooks and the skill read the environment at launch.
 
-**Stay up to date:** third-party marketplaces don't auto-update by default. Enable it in `/plugin` → Marketplaces → `linearb-ai` → Enable auto-update, or run `claude plugin update agentic-advisor@linearb-ai` and restart. See the [changelog](https://linear-b.github.io/agent-plugins/) for what changed in each release.
+**Stay up to date:** third-party marketplaces don't auto-update by default. Enable it in `/plugin` → Marketplaces → `linearb-ai` → Enable auto-update, or run `claude plugin update agentic-advisor@linearb-ai` and restart. See the [changelog](https://linear-b.github.io/agent-plugins/changelog/) for what changed in each release.
 
 That's it. Start a code task (`fix the retry bug in billing/client.ts`) and the agent prints its verdict before it edits anything:
 
