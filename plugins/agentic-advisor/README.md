@@ -34,7 +34,7 @@ The agent prints a one-line verdict before writing code, e.g.:
 
 ## Triggers
 
-Auto-fires (once per repo, per session) on a Jira ticket in the prompt, code-task keywords (fix / implement / refactor…), or the first source-file edit or subagent spawn in a git repo (read-only agents like Explore don't count). Skips questions, doc/text edits, and files outside a git repo. If the grade was decided but never printed (common at lower effort levels, where the model keeps it in its thinking), the next file read or edit is held once until the agent records the verdict line.
+Auto-fires (once per repo, per session) on a Jira ticket in the prompt, code-task keywords (fix / implement / refactor…), or the first source-file edit or subagent spawn in a git repo (read-only agents like Explore don't count). Skips questions, doc/text edits, and files outside a git repo. If the grade was decided but never printed (common at lower effort levels, where the model keeps it in its thinking), the agent gets a one-time reminder (not a block) on its next file read or edit to record the verdict line.
 
 ## Usage telemetry (on by default)
 
@@ -85,6 +85,8 @@ Then **launch Claude Code from a shell that has it exported** (hooks and the ski
 ## Opting out
 
 - **Telemetry:** `export LINEARB_TELEMETRY=0` (also accepts `false` / `off` / `no`) and relaunch Claude Code. The skill keeps working with your token; only reporting stops.
+
+- **The skill, just for you:** `export LINEARB_AGENTIC_ADVISOR_ENABLED=false` (also accepts `0` / `off` / `no`), or add `"env": {"LINEARB_AGENTIC_ADVISOR_ENABLED": "false"}` to your `~/.claude/settings.json`, and relaunch Claude Code. The skill stops auto-running and nothing is reported; it still runs if you ask for it by name. This works even when your org installs the plugin through managed settings.
 
 - **Everything:** disable the plugin (`/plugin`) to stop the auto-trigger. The hooks only inject a suggestion to run the skill and (optionally) report a metric — they never block your work.
 

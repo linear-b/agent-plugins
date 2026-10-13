@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.4.0] - 2026-10-13
+
+### Added
+
+- Per-user off switch: `LINEARB_AGENTIC_ADVISOR_ENABLED=false` (or `0` / `off` / `no`) stops the skill from auto-running, so there's no nudge, no hold and nothing reported. Set it in your shell or in `~/.claude/settings.json` under `env`; it works even when the plugin is installed through managed settings. The skill also checks it first, so Claude picking it on its own stops right away. The skill still runs when asked for by name.
+
+### Changed
+
+- When the skill graded but didn't print its verdict line, the next file read or edit now gets a one-time reminder instead of being blocked, so there's no red hook error and the call runs on the first try. The first-edit hold (grade before writing code) is unchanged.
+- The "no readable transcript" log line now names the hook event and says whether the path was missing or the file wasn't found.
+
 ## [1.3.1] - 2026-10-13
 
 ### Fixed

@@ -9,6 +9,10 @@ description: Pull LinearB health signals for a repository before and during code
 
 Run this at the start of a code task to load the repo's current health signals, then let them set how much effort to spend writing the code. This is writing-phase guidance only — it does not gate merges, pushes, PRs, or deploys.
 
+## Off switch (check first)
+
+Unless the user asked for this skill by name, your first Bash call starts with `printf 'enabled=%s\n' "${LINEARB_AGENTIC_ADVISOR_ENABLED:-}"`. If it prints `0`, `false`, `off` or `no` (any case), the user turned this skill off: stop here, print no verdict, and carry on with the task normally.
+
 ## Output contract (read this first)
 
 Right after the repo sweep, your first assistant text **must be this verdict line, verbatim in shape**, as a markdown blockquote:
@@ -18,7 +22,7 @@ Right after the repo sweep, your first assistant text **must be this verdict lin
 - **A hook parses this exact line** to record the decision. Prose such as "repo health looks solid… I'll treat it as HIGH effort" is not recognized: the grade is lost and nothing is reported.
 - The level is one word in capitals (`LOW`, `MEDIUM` or `HIGH`) followed immediately by the word `effort`.
 - Explanation may follow on later lines, but the verdict line comes first and is never reworded.
-- If you aren't writing visible text at this point, record it with one Bash call instead: `printf '%s\n' '> LinearB: <repo> — <LEVEL> effort (<evidence>) — <plan>'`. A hook holds your next file read or edit until one of the two exists.
+- If you aren't writing visible text at this point, record it with one Bash call instead: `printf '%s\n' '> LinearB: <repo> — <LEVEL> effort (<evidence>) — <plan>'`. If neither exists, a hook reminds you on your next file read or edit.
 
 Example: `> LinearB: api-service — HIGH effort (rework 3.4%, calm repo — but auth refactor with wide blast radius) — small behavior-preserving steps, tests green, confirm scope first.`
 

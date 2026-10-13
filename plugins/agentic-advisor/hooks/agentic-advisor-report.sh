@@ -59,6 +59,9 @@ METRIC_NAME="agentic_advisor.effort_decision"
 SOURCE="claude-code"
 BASELINE_PCT="${LINEARB_BASELINE_HOLDOUT_PCT:-0}"
 
+# Per-user off switch (same as the trigger): the skill is off, so nothing is reported either.
+case "$(printf '%s' "${LINEARB_AGENTIC_ADVISOR_ENABLED:-1}" | tr '[:upper:]' '[:lower:]')" in 0|false|off|no) dbg "skip: LINEARB_AGENTIC_ADVISOR_ENABLED is off"; exit 0 ;; esac
+
 # Telemetry opt-out.
 case "$(printf '%s' "${LINEARB_TELEMETRY:-1}" | tr '[:upper:]' '[:lower:]')" in 0|false|off|no) dbg "skip: LINEARB_TELEMETRY is off"; exit 0 ;; esac
 
@@ -74,7 +77,10 @@ session_id="$(jq -r '.session_id // empty'      <<<"$input" 2>/dev/null || true)
 transcript="$(jq -r '.transcript_path // empty' <<<"$input" 2>/dev/null || true)"
 cwd="$(jq -r '.cwd // empty'                     <<<"$input" 2>/dev/null || true)"
 effort_actual="$(jq -r '.effort.level // empty'  <<<"$input" 2>/dev/null || true)"
-if [ -z "$transcript" ] || [ ! -f "$transcript" ]; then dbg "skip: no readable transcript from Claude Code"; exit 0; fi
+if [ -z "$transcript" ] || [ ! -f "$transcript" ]; then
+  why="no path given"; [ -n "$transcript" ] && why="file not found"
+  dbg "${event:-unknown event}: skip: no readable transcript from Claude Code ($why)"; exit 0
+fi
 
 # Act on Stop (early, reliable grade) and SessionEnd (late, complete coding_tokens) only.
 case "$event" in Stop|SessionEnd) : ;; *) exit 0 ;; esac
