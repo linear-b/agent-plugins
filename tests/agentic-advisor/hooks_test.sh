@@ -36,7 +36,7 @@ STUB
   TRANSCRIPT="$T/transcript.jsonl"
   : > "$TRANSCRIPT"
   export LINEARB_API_TOKEN="test-token"
-  unset LINEARB_TELEMETRY LINEARB_BASELINE_HOLDOUT_PCT CLAUDE_PLUGIN_ROOT
+  unset LINEARB_TELEMETRY LINEARB_ADVISOR LINEARB_BASELINE_HOLDOUT_PCT CLAUDE_PLUGIN_ROOT
 }
 teardown() { rm -rf "$T"; }
 
@@ -73,6 +73,19 @@ teardown
 setup
 run "$TRIGGER" UserPromptSubmit "$(prompt 'what time is it?')"
 check "trigger: non-code prompt is silent" silent
+teardown
+
+for v in 0 false OFF no; do
+  setup
+  LINEARB_ADVISOR=$v run "$TRIGGER" UserPromptSubmit "$(prompt 'fix the login bug LINBEE-123')"
+  check "trigger: LINEARB_ADVISOR=$v -> no nudge" silent
+  LINEARB_ADVISOR=$v run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+  check "trigger: LINEARB_ADVISOR=$v -> no hold" silent
+  teardown
+done
+setup
+LINEARB_ADVISOR=1 run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "trigger: LINEARB_ADVISOR=1 keeps the hold" denied
 teardown
 
 # --- trigger: PreToolUse grade-before-edit hold ---

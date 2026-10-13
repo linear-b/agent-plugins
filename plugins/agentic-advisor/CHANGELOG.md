@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.0] - 2026-10-13
+
+### Added
+
+- Per-user off switch: `LINEARB_ADVISOR=0` (or `false` / `off` / `no`) stops the skill from auto-running, so there's no nudge, no hold and nothing reported. Set it in your shell or in `~/.claude/settings.json` under `env`; it works even when the plugin is installed through managed settings. The skill still runs when asked for by name.
+
 ## [1.3.1] - 2026-10-13
 
 ### Fixed

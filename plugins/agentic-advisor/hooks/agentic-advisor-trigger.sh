@@ -27,6 +27,9 @@ set -uo pipefail
 # shellcheck disable=SC1091  # log.sh sits next to this script
 . "$(dirname "${BASH_SOURCE[0]:-$0}")/log.sh" 2>/dev/null || dbg() { :; }
 
+# Per-user off switch: LINEARB_ADVISOR=0 (or false/off/no) stops the auto-trigger, so no nudge and no hold.
+case "$(printf '%s' "${LINEARB_ADVISOR:-1}" | tr '[:upper:]' '[:lower:]')" in 0|false|off|no) exit 0 ;; esac
+
 # jq parses the hook payload; without it, no-op.
 command -v jq >/dev/null 2>&1 || { dbg "trigger: skip: jq not found, the skill is never nudged"; exit 0; }
 
