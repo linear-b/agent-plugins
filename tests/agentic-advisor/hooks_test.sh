@@ -36,7 +36,7 @@ STUB
   TRANSCRIPT="$T/transcript.jsonl"
   : > "$TRANSCRIPT"
   export LINEARB_API_TOKEN="test-token"
-  unset LINEARB_TELEMETRY AGENTIC_ADVISOR_ENABLED LINEARB_BASELINE_HOLDOUT_PCT CLAUDE_PLUGIN_ROOT
+  unset LINEARB_TELEMETRY LINEARB_AGENTIC_ADVISOR_ENABLED LINEARB_BASELINE_HOLDOUT_PCT CLAUDE_PLUGIN_ROOT
 }
 teardown() { rm -rf "$T"; }
 
@@ -78,15 +78,15 @@ teardown
 
 for v in 0 false OFF no; do
   setup
-  AGENTIC_ADVISOR_ENABLED=$v run "$TRIGGER" UserPromptSubmit "$(prompt 'fix the login bug LINBEE-123')"
-  check "trigger: AGENTIC_ADVISOR_ENABLED=$v -> no nudge" silent
-  AGENTIC_ADVISOR_ENABLED=$v run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
-  check "trigger: AGENTIC_ADVISOR_ENABLED=$v -> no hold" silent
+  LINEARB_AGENTIC_ADVISOR_ENABLED=$v run "$TRIGGER" UserPromptSubmit "$(prompt 'fix the login bug LINBEE-123')"
+  check "trigger: LINEARB_AGENTIC_ADVISOR_ENABLED=$v -> no nudge" silent
+  LINEARB_AGENTIC_ADVISOR_ENABLED=$v run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+  check "trigger: LINEARB_AGENTIC_ADVISOR_ENABLED=$v -> no hold" silent
   teardown
 done
 setup
-AGENTIC_ADVISOR_ENABLED=1 run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
-check "trigger: AGENTIC_ADVISOR_ENABLED=1 keeps the hold" denied
+LINEARB_AGENTIC_ADVISOR_ENABLED=1 run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "trigger: LINEARB_AGENTIC_ADVISOR_ENABLED=1 keeps the hold" denied
 teardown
 
 # --- trigger: PreToolUse grade-before-edit hold ---
@@ -180,8 +180,8 @@ teardown
 
 setup
 add_skill; add_verdict
-AGENTIC_ADVISOR_ENABLED=false run "$REPORT" SessionEnd
-check "report: AGENTIC_ADVISOR_ENABLED=false -> nothing reported" no_calls
+LINEARB_AGENTIC_ADVISOR_ENABLED=false run "$REPORT" SessionEnd
+check "report: LINEARB_AGENTIC_ADVISOR_ENABLED=false -> nothing reported" no_calls
 teardown
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

@@ -11,7 +11,7 @@ Run this at the start of a code task to load the repo's current health signals, 
 
 ## Off switch (check first)
 
-Unless the user asked for this skill by name, your first Bash call starts with `printf 'enabled=%s\n' "${AGENTIC_ADVISOR_ENABLED:-}"`. If it prints `0`, `false`, `off` or `no` (any case), the user turned this skill off: stop here, print no verdict, and carry on with the task normally.
+Unless the user asked for this skill by name, your first Bash call starts with `printf 'enabled=%s\n' "${LINEARB_AGENTIC_ADVISOR_ENABLED:-}"`. If it prints `0`, `false`, `off` or `no` (any case), the user turned this skill off: stop here, print no verdict, and carry on with the task normally.
 
 ## Output contract (read this first)
 

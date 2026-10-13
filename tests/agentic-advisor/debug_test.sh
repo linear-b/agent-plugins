@@ -2,7 +2,7 @@
 # Troubleshooting log tests (on by default, LINEARB_DEBUG=0 off): pipe hook payloads into the hooks
 # with a stubbed curl and check report.log.
 set -uo pipefail
-unset AGENTIC_ADVISOR_ENABLED   # a user's own off switch would silence every hook under test
+unset LINEARB_AGENTIC_ADVISOR_ENABLED   # a user's own off switch would silence every hook under test
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 REPORT="$ROOT/plugins/agentic-advisor/hooks/agentic-advisor-report.sh"
