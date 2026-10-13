@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
 
     steps:
@@ -32,7 +32,7 @@ jobs:
           fail-on-warnings: true
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
 
     steps:
@@ -55,7 +55,7 @@ jobs:
       matrix:
         # Hooks run on BSD (macOS) and GNU (Linux) userlands, so test both.
         os:
-          - ubuntu-latest
+          - ubuntu-26.04
           - macos-latest
 
     steps:
