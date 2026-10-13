@@ -8,6 +8,7 @@
 
 ### Changed
 
+- When the skill graded but didn't print its verdict line, the next file read or edit now gets a one-time reminder instead of being blocked, so there's no red hook error and the call runs on the first try. The first-edit hold (grade before writing code) is unchanged.
 - The "no readable transcript" log line now names the hook event and says whether the path was missing or the file wasn't found.
 
 ## [1.3.1] - 2026-10-13

@@ -49,6 +49,7 @@ run() { out="$(payload "$2" "${3:-}" | "$1")"; rc=$?; } # $1 script, $2 event, $
 
 silent()  { [ "$rc" -eq 0 ] && [ -z "$out" ]; }
 nudged()  { [ "$rc" -eq 0 ] && jq -e '.hookSpecificOutput.additionalContext | contains("agentic-advisor")' <<<"$out" >/dev/null; }
+reminded() { [ "$rc" -eq 0 ] && jq -e '(.hookSpecificOutput.permissionDecision == null) and (.hookSpecificOutput.additionalContext | contains("verdict line"))' <<<"$out" >/dev/null; }
 denied()  { [ "$rc" -eq 0 ] && jq -e '.hookSpecificOutput.permissionDecision == "deny"' <<<"$out" >/dev/null; }
 add_skill()   { printf '%s\n' '{"timestamp":"2026-01-01T00:00:00Z","message":{"role":"assistant","model":"m","usage":{"output_tokens":10},"content":[{"type":"tool_use","name":"Skill","input":{"skill":"agentic-advisor:agentic-advisor"}}]}}' >> "$TRANSCRIPT"; }
 add_verdict() { printf '%s\n' '{"timestamp":"2026-01-01T00:00:05Z","message":{"role":"assistant","model":"m","usage":{"output_tokens":20},"content":[{"type":"text","text":"> LinearB: widgets — MEDIUM effort (rework 6.5%) — focused diff."}]}}' >> "$TRANSCRIPT"; }
@@ -136,7 +137,7 @@ teardown
 setup
 add_skill
 run "$TRIGGER" PreToolUse "$(tool Read app.js)"
-check "trigger: skill ran without verdict -> hold for verdict" denied
+check "trigger: skill ran without verdict -> reminder, not a block" reminded
 teardown
 
 setup

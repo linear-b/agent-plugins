@@ -22,7 +22,7 @@ Right after the repo sweep, your first assistant text **must be this verdict lin
 - **A hook parses this exact line** to record the decision. Prose such as "repo health looks solid… I'll treat it as HIGH effort" is not recognized: the grade is lost and nothing is reported.
 - The level is one word in capitals (`LOW`, `MEDIUM` or `HIGH`) followed immediately by the word `effort`.
 - Explanation may follow on later lines, but the verdict line comes first and is never reworded.
-- If you aren't writing visible text at this point, record it with one Bash call instead: `printf '%s\n' '> LinearB: <repo> — <LEVEL> effort (<evidence>) — <plan>'`. A hook holds your next file read or edit until one of the two exists.
+- If you aren't writing visible text at this point, record it with one Bash call instead: `printf '%s\n' '> LinearB: <repo> — <LEVEL> effort (<evidence>) — <plan>'`. If neither exists, a hook reminds you on your next file read or edit.
 
 Example: `> LinearB: api-service — HIGH effort (rework 3.4%, calm repo — but auth refactor with wide blast radius) — small behavior-preserving steps, tests green, confirm scope first.`
 

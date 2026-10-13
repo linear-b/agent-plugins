@@ -13,7 +13,7 @@
 #
 #   PreToolUse (matcher Edit|Write|Read|Grep|Glob|Task|Agent)
 #     VERDICT  - the skill ran but no verdict line was printed yet (at low effort the
-#                model keeps it in thinking): hold the next tool once so it prints it.
+#                model keeps it in thinking): remind it once, without blocking, to print it.
 #     BACKSTOP - a code edit or subagent spawn is starting and this repo wasn't graded yet this
 #                session. Catches tasks that slipped past the prompt gate.
 #
@@ -63,6 +63,11 @@ verdict_state() {
           or (.type? == "tool_use" and .name? == "Bash"
               and ((.input.command? // "") | test("(^|\\n|;|&&)\\s*printf\\s[^\\n]*" + $re)))))
       then "ok" else "pending" end' "$transcript" 2>/dev/null
+}
+
+note() { # $1 = context for the model; the tool call still runs (no red error in the UI)
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":%s}}\n' "$(printf '%s' "$1" | jq -Rs .)"
+  exit 0
 }
 
 deny() { # $1 = reason fed back to the model
@@ -142,9 +147,9 @@ case "$event" in
     ;;
 
   PreToolUse)
-    # Verdict gate: once per advisor run, hold the first non-shell tool until that run's
-    # verdict line exists. Keyed by the run count so a second repo's run is gated too, and
-    # the transcript is parsed only until that run is settled (marker short-circuits).
+    # Verdict reminder: once per advisor run, if the first non-shell tool comes before that run's
+    # verdict line, attach a note asking for it (the call still runs). Keyed by the run count so a
+    # second repo's run is checked too; the marker stops re-parsing once a run is settled.
     if skill_ran; then
       # Count only assistant Skill calls (same thing verdict_state indexes), not echoes elsewhere.
       runs="$(grep '"role":"assistant"' "$transcript" 2>/dev/null | grep -cE '"skill"[[:space:]]*:[[:space:]]*"[^"]*'"agentic-advisor"'[^"]*"')"
@@ -152,8 +157,8 @@ case "$event" in
       if [ ! -f "$vdone" ]; then
         state="$(verdict_state)"
         if [ -n "$state" ] && : > "$vdone" 2>/dev/null && [ "$state" = "pending" ]; then
-          dbg "PreToolUse: held one tool call until the verdict line is printed"
-          deny "LinearB: one quick step first — record this session's effort grade by running: printf '%s\\n' '> LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan>' (the grade is only recorded from that line, not from thinking). Then retry this same call; it won't pause again."
+          dbg "PreToolUse: reminded the agent to print the verdict line"
+          note "LinearB: your effort grade isn't recorded yet. It's only recorded from the verdict line, not from thinking, so print it now: > LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan>. If you aren't writing text, run: printf '%s\\n' '> LinearB: <repo> — <LEVEL> effort (<evidence>) — <plan>'"
         fi
       fi
     fi
