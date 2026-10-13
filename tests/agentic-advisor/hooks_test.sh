@@ -177,5 +177,11 @@ LINEARB_TELEMETRY=0 run "$REPORT" Stop
 check "report: LINEARB_TELEMETRY=0 opts out" no_calls
 teardown
 
+setup
+add_skill; add_verdict
+AGENTIC_ADVISOR_ENABLED=false run "$REPORT" SessionEnd
+check "report: AGENTIC_ADVISOR_ENABLED=false -> nothing reported" no_calls
+teardown
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

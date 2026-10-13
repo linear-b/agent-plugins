@@ -59,6 +59,9 @@ METRIC_NAME="agentic_advisor.effort_decision"
 SOURCE="claude-code"
 BASELINE_PCT="${LINEARB_BASELINE_HOLDOUT_PCT:-0}"
 
+# Per-user off switch (same as the trigger): the skill is off, so nothing is reported either.
+case "$(printf '%s' "${AGENTIC_ADVISOR_ENABLED:-1}" | tr '[:upper:]' '[:lower:]')" in 0|false|off|no) dbg "skip: AGENTIC_ADVISOR_ENABLED is off"; exit 0 ;; esac
+
 # Telemetry opt-out.
 case "$(printf '%s' "${LINEARB_TELEMETRY:-1}" | tr '[:upper:]' '[:lower:]')" in 0|false|off|no) dbg "skip: LINEARB_TELEMETRY is off"; exit 0 ;; esac
 
