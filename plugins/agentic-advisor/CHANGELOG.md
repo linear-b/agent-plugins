@@ -6,6 +6,10 @@
 
 - Per-user off switch: `AGENTIC_ADVISOR_ENABLED=false` (or `0` / `off` / `no`) stops the skill from auto-running, so there's no nudge, no hold and nothing reported. Set it in your shell or in `~/.claude/settings.json` under `env`; it works even when the plugin is installed through managed settings. The skill still runs when asked for by name.
 
+### Changed
+
+- The "no readable transcript" log line now names the hook event and says whether the path was missing or the file wasn't found.
+
 ## [1.3.1] - 2026-10-13
 
 ### Fixed

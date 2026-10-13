@@ -89,6 +89,10 @@ check "no token: reason logged" has "$H" "skip: LINEARB_API_TOKEN not set"
 H="$W/telemetryoff"; run "$H" Stop  LINEARB_API_TOKEN=test-token LINEARB_TELEMETRY=0
 check "telemetry off: reason logged" has "$H" "skip: LINEARB_TELEMETRY is off"
 
+H="$W/notranscript"; T0=$TRANSCRIPT; TRANSCRIPT="$W/missing.jsonl"; run "$H" SessionEnd LINEARB_API_TOKEN=test-token; TRANSCRIPT=$T0
+check "no transcript: event and reason logged" has "$H" "SessionEnd: skip: no readable transcript from Claude Code (file not found)"
+check "no transcript: path not logged" bash -c "! grep -q missing.jsonl '$H/.cache/agentic-advisor/report.log'"
+
 H="$W/sent"; run "$H" Stop  LINEARB_API_TOKEN=test-token
 run "$H" Stop  LINEARB_API_TOKEN=test-token
 run "$H" SessionEnd  LINEARB_API_TOKEN=test-token
