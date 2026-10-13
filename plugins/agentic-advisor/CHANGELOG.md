@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1] - 2026-10-13
+
+### Fixed
+
+- The grade now happens before work is handed to a subagent. The first subagent spawn in a repo is held once until the skill runs, like the first edit, and the agent is asked to pass the effort level on in the subagent's prompt. Before, a task that delegated its edits (common in scheduled tasks) was only graded at the main agent's first own edit, after the work was done. Read-only agents (Explore, Plan) are never held.
+- Troubleshooting-log fixes from the 1.3.0 review that missed the release: curl's response and error files are now private (0600), emails are redacted before a server response is cut to length, the log no longer records the ticket key from the prompt, and the version prefix no longer needs jq.
+
 ## [1.3.0] - 2026-10-12
 
 ### Changed

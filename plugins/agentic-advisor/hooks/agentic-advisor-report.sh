@@ -182,13 +182,15 @@ post() { # $1 = payload json, $2 = short description for the debug log
   # Token on stdin (-H @-), payload from a private temp file: neither is in curl's argv.
   local pf; pf="$(umask 077; mktemp "$marker_dir/payload.XXXXXX" 2>/dev/null)" || { dbg "$event: error: no temp file for ${2:-event}"; return 0; }
   printf '%s' "$1" > "$pf" || { rm -f "$pf"; dbg "$event: error: could not write ${2:-event}"; return 0; }
-  ( ( code="$(curl -sS -m 5 -o "$pf.out" -w '%{http_code}' -X POST "$REPORT_URL" \
+  ( ( umask 077   # $pf.out / $pf.err come from redirection, not mktemp
+      code="$(curl -sS -m 5 -o "$pf.out" -w '%{http_code}' -X POST "$REPORT_URL" \
         -H @- -H "Content-Type: application/json" \
         --data-binary @"$pf" <<<"x-api-key: $token" 2>"$pf.err")"; rc=$?
       why=""
-      # Network failures carry curl's reason; 4xx/5xx carry the server's (emails redacted).
-      if [ "$rc" -ne 0 ]; then why=" (curl exit $rc: $(head -c 200 "$pf.err" 2>/dev/null | tr -d '\n' | redact))"
-      elif [ "${code:-0}" -ge 400 ] 2>/dev/null; then why=" (response: $(head -c 300 "$pf.out" 2>/dev/null | tr -d '\n' | redact))"; fi
+      # Network failures carry curl's reason; 4xx/5xx carry the server's. Redact before cutting,
+      # so a cut can't leave half an email behind.
+      if [ "$rc" -ne 0 ]; then why=" (curl exit $rc: $(head -c 4096 "$pf.err" 2>/dev/null | tr -d '\n' | redact | cut -c1-200))"
+      elif [ "${code:-0}" -ge 400 ] 2>/dev/null; then why=" (response: $(head -c 4096 "$pf.out" 2>/dev/null | tr -d '\n' | redact | cut -c1-300))"; fi
       rm -f "$pf" "$pf.out" "$pf.err"
       dbg "$event: sent ${2:-event} -> HTTP ${code:-none} to ${API_URL%/}$why" ) & ) 2>/dev/null || true
 }

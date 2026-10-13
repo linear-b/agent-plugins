@@ -88,6 +88,38 @@ run "$TRIGGER" PreToolUse "$(tool Edit README.md)"
 check "trigger: docs edit is never held" silent
 teardown
 
+# --- trigger: PreToolUse hold on the first subagent spawn ---
+pass_effort() { jq -e '.hookSpecificOutput.permissionDecisionReason | contains("Tell the subagent")' <<<"$out" >/dev/null; }
+spawn() { printf ',"tool_name":"%s","tool_input":{"subagent_type":"%s","prompt":"do it"}' "$1" "$2"; }
+setup
+run "$TRIGGER" PreToolUse "$(spawn Agent general-purpose)"
+check "trigger: first subagent spawn is held" denied
+check "trigger: spawn hold asks to pass the effort on" pass_effort
+run "$TRIGGER" PreToolUse "$(spawn Agent general-purpose)"
+check "trigger: spawn hold happens only once" silent
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "trigger: a held spawn uses up the edit hold too" silent
+teardown
+
+setup
+run "$TRIGGER" PreToolUse "$(spawn Task Explore)"
+check "trigger: read-only subagent is never held" silent
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "trigger: read-only spawn leaves the edit hold in place" denied
+teardown
+
+setup
+add_skill; add_verdict
+run "$TRIGGER" PreToolUse "$(spawn Agent general-purpose)"
+check "trigger: graded -> spawn allowed" silent
+teardown
+
+setup
+REPO="$T/plain"; mkdir -p "$REPO"
+run "$TRIGGER" PreToolUse "$(spawn Agent general-purpose)"
+check "trigger: spawn outside a git repo is never held" silent
+teardown
+
 setup
 add_skill
 run "$TRIGGER" PreToolUse "$(tool Read app.js)"

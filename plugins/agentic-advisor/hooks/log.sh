@@ -23,7 +23,8 @@ dbg() {
     mv -f "$f" "$f.old" 2>/dev/null || return 0
   fi
   if [ -z "$_lb_ver" ]; then
-    _lb_ver="$(jq -r '.version // empty' "$(dirname "${BASH_SOURCE[0]}")/../.claude-plugin/plugin.json" 2>/dev/null)"
+    _lb_ver="$(sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+      "$(dirname "${BASH_SOURCE[0]}")/../.claude-plugin/plugin.json" 2>/dev/null | head -1)"
     _lb_ver="v${_lb_ver:-?}"
   fi
   (umask 077; printf '%s %s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$_lb_ver" "$*" >> "$f") 2>/dev/null || true

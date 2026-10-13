@@ -21,7 +21,13 @@ cat > "$W/bin/curl" <<'STUB'
 #!/usr/bin/env bash
 w=0; o=""; while [ $# -gt 0 ]; do case "$1" in -w) w=1; shift ;; -o) o="$2"; shift ;; esac; shift; done
 cat >/dev/null
-if [ -n "$o" ] && [ "$o" != /dev/null ]; then printf '%s' "${STUB_BODY:-}" > "$o"; fi
+if [ -n "$o" ] && [ "$o" != /dev/null ]; then
+  printf '%s' "${STUB_BODY:-}" > "$o"
+  # Record the modes of the response file and the redirected stderr file.
+  if [ -n "${STUB_PERMS:-}" ]; then
+    for x in "$o" "${o%.out}.err"; do stat -c %a "$x" 2>/dev/null || stat -f %Lp "$x"; done > "$STUB_PERMS"
+  fi
+fi
 if [ -n "${STUB_ERR:-}" ]; then printf '%s\n' "$STUB_ERR" >&2; fi
 [ "$w" = 1 ] && printf '%s' "${STUB_CODE:-200}"
 exit "${STUB_RC:-0}"
@@ -69,6 +75,12 @@ check "network error: curl exit and reason logged" has "$H" "HTTP 000 to https:/
 H="$W/reject"; run "$H" Stop LINEARB_API_TOKEN=test-token STUB_CODE=422 'STUB_BODY={"error":"bad contributor_email someone@corp.com"}'
 check "4xx: server reason logged" has "$H" 'HTTP 422 to https://public-api.linearb.io (response: {"error":"bad contributor_email <email>"})'
 check "4xx: email in the response redacted" bash -c "! grep -q 'someone@corp.com' '$H/.cache/agentic-advisor/report.log'"
+H="$W/perms"; (umask 022; run "$H" Stop LINEARB_API_TOKEN=test-token "STUB_PERMS=$W/perms.txt")
+check "curl response and error files are private (0600)" test "$(sort -u "$W/perms.txt" 2>/dev/null)" = 600
+# An email straddling the cut point is still fully masked.
+LONG="$(printf 'x%.0s' $(seq 290))"
+H="$W/straddle"; run "$H" Stop LINEARB_API_TOKEN=test-token STUB_CODE=400 "STUB_BODY={\"e\":\"$LONG long.name@example.com\"}"
+check "4xx: email at the cut point not leaked" bash -c "! grep -qE 'long\.na|long\.name|example' '$H/.cache/agentic-advisor/report.log'"
 check "temp files cleaned up" bash -c "! ls '$H/.cache/agentic-advisor/' | grep -q payload"
 
 H="$W/notoken"; run "$H" Stop
@@ -139,11 +151,20 @@ for ev in Stop SessionEnd; do
 done
 check "'skill never ran' logged at SessionEnd" has "$H" "SessionEnd: skip: skill never ran in this session"
 
+# Without jq the trigger still logs why it stopped, with the plugin version (read without jq).
+NOJQ="$W/nojq"; mkdir -p "$NOJQ"
+for t in bash sed head date mkdir chmod wc mv rm tr dirname cat printf; do p="$(command -v "$t")" && ln -s "$p" "$NOJQ/$t"; done
+H="$W/nojqhome"; mkdir -p "$H"
+printf '{"hook_event_name":"UserPromptSubmit"}' | env -u LINEARB_DEBUG HOME="$H" XDG_CACHE_HOME="$H/.cache" PATH="$NOJQ" \
+  "$NOJQ/bash" "$ROOT/plugins/agentic-advisor/hooks/agentic-advisor-trigger.sh" >/dev/null 2>&1
+check "jq missing: logged with the plugin version" bash -c "grep -qE ' v[0-9]+\.[0-9]+\.[0-9]+ trigger: skip: jq not found' '$H/.cache/agentic-advisor/report.log'"
+
 # The trigger logs its nudges too (ticket key only, never the prompt).
 H="$W/trig"; mkdir -p "$H"
 printf '{"hook_event_name":"UserPromptSubmit","session_id":"t1","cwd":"%s","prompt":"fix ABC-12 secret-words"}' "$REPO" \
   | env -u LINEARB_DEBUG HOME="$H" XDG_CACHE_HOME="$H/.cache" bash "$ROOT/plugins/agentic-advisor/hooks/agentic-advisor-trigger.sh" >/dev/null 2>&1
-check "trigger nudge logged" has "$H" "UserPromptSubmit: nudged the agent to run the skill (ticket ABC-12)"
+check "trigger nudge logged" has "$H" "UserPromptSubmit: nudged the agent to run the skill (ticket key)"
+check "trigger never logs the ticket key" bash -c "! grep -q 'ABC-12' '$H/.cache/agentic-advisor/report.log'"
 check "trigger never logs the prompt" bash -c "! grep -q 'secret-words' '$H/.cache/agentic-advisor/report.log'"
 
 printf '{"hook_event_name":"Stop","session_id":"nohome","transcript_path":"%s","cwd":"%s"}' "$TRANSCRIPT" "$REPO" \
