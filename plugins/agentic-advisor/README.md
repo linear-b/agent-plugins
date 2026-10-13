@@ -86,7 +86,7 @@ Then **launch Claude Code from a shell that has it exported** (hooks and the ski
 
 - **Telemetry:** `export LINEARB_TELEMETRY=0` (also accepts `false` / `off` / `no`) and relaunch Claude Code. The skill keeps working with your token; only reporting stops.
 
-- **The skill, just for you:** `export LINEARB_ADVISOR=0` (also accepts `false` / `off` / `no`), or add `"env": {"LINEARB_ADVISOR": "0"}` to your `~/.claude/settings.json`, and relaunch Claude Code. The skill stops auto-running and nothing is reported; it still runs if you ask for it by name. This works even when your org installs the plugin through managed settings.
+- **The skill, just for you:** `export AGENTIC_ADVISOR_ENABLED=false` (also accepts `0` / `off` / `no`), or add `"env": {"AGENTIC_ADVISOR_ENABLED": "false"}` to your `~/.claude/settings.json`, and relaunch Claude Code. The skill stops auto-running and nothing is reported; it still runs if you ask for it by name. This works even when your org installs the plugin through managed settings.
 
 - **Everything:** disable the plugin (`/plugin`) to stop the auto-trigger. The hooks only inject a suggestion to run the skill and (optionally) report a metric — they never block your work.
 
