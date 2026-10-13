@@ -12,7 +12,7 @@ jobs:
   create-tag:
     # Manual runs must not release from a non-main branch.
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       contents: write
