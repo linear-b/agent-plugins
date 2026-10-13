@@ -14,7 +14,7 @@
 #   PreToolUse (matcher Edit|Write|Read|Grep|Glob|Task|Agent)
 #     VERDICT  - the skill ran but no verdict line was printed yet (at low effort the
 #                model keeps it in thinking): hold the next tool once so it prints it.
-#     BACKSTOP - a code edit is starting and this repo wasn't nudged yet this
+#     BACKSTOP - a code edit or subagent spawn is starting and this repo wasn't graded yet this
 #                session. Catches tasks that slipped past the prompt gate.
 #
 # This NEVER does LinearB work itself and NEVER blocks. It only injects an
@@ -155,28 +155,38 @@ case "$event" in
       fi
     fi
     tool="$(jq -r '.tool_name // empty' <<<"$input" 2>/dev/null || true)"
-    case "$tool" in Read|Grep|Glob|Task|Agent) exit 0 ;; esac
-
-    # Edit|Write only from here. ONE-TIME grade-before-edit
-    # HOLD: the FIRST source edit in a repo this session is denied (permissionDecision:deny) so the
-    # skill grades before code is written. Held at most ONCE per repo/session (via
-    # its own dedicated .held marker — NOT the UserPromptSubmit nudge (.done) marker,
-    # so a prior prompt-nudge can't satisfy the check and bypass the hold); after
-    # that one hold, edits proceed even if the skill still hasn't run (we don't wall).
-    # Scoped to real source edits in a git repo; fails OPEN on any uncertainty
-    # (missing file path, non-git, missing transcript, or marker write failure).
-    file_path="$(jq -r '.tool_input.file_path // empty' <<<"$input" 2>/dev/null || true)"
-    [ -z "$file_path" ] && exit 0
-    dir="$(dirname "$file_path")"
-    # A Write can target a folder that doesn't exist yet: check the nearest existing parent.
-    while [ ! -d "$dir" ] && [ "$dir" != "/" ] && [ "$dir" != "." ]; do dir="$(dirname "$dir")"; done
-
-    # Only gate real source edits inside a git repo (skip docs/text, skip non-git).
-    git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
-    ext="$(printf '%s' "${file_path##*.}" | tr '[:upper:]' '[:lower:]')"
-    case "$ext" in
-      md|markdown|mdx|txt|rst|adoc|log) exit 0 ;;
+    case "$tool" in
+      Read|Grep|Glob) exit 0 ;;
+      Task|Agent)
+        # Delegated work can write code too, so grade before the first spawn. Read-only agent types can't edit.
+        case "$(jq -r '.tool_input.subagent_type // empty' <<<"$input" 2>/dev/null)" in
+          Explore|Plan|claude-code-guide|statusline-setup) exit 0 ;;
+        esac
+        what="spawning a subagent"
+        dir="${cwd:-.}"
+        ;;
+      *)
+        what="this edit"
+        file_path="$(jq -r '.tool_input.file_path // empty' <<<"$input" 2>/dev/null || true)"
+        [ -z "$file_path" ] && exit 0
+        dir="$(dirname "$file_path")"
+        # A Write can target a folder that doesn't exist yet: check the nearest existing parent.
+        while [ ! -d "$dir" ] && [ "$dir" != "/" ] && [ "$dir" != "." ]; do dir="$(dirname "$dir")"; done
+        ext="$(printf '%s' "${file_path##*.}" | tr '[:upper:]' '[:lower:]')"
+        case "$ext" in
+          md|markdown|mdx|txt|rst|adoc|log) exit 0 ;;   # docs/text edits are never held
+        esac
+        ;;
     esac
+
+    # ONE-TIME grade-before-work HOLD: the FIRST source edit or subagent spawn in a repo this
+    # session is denied (permissionDecision:deny) so the skill grades before code is written.
+    # Held at most ONCE per repo/session (via its own dedicated .held marker — NOT the
+    # UserPromptSubmit nudge (.done) marker, so a prior prompt-nudge can't satisfy the check
+    # and bypass the hold); after that one hold, work proceeds even if the skill still hasn't
+    # run (we don't wall). Scoped to a git repo; fails OPEN on any uncertainty
+    # (missing file path, non-git, missing transcript, or marker write failure).
+    git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 
     # Skill already ran this session -> allow the edit.
     skill_ran && exit 0
@@ -189,14 +199,15 @@ case "$event" in
     held="${marker%.done}.held"
     [ -f "$held" ] && exit 0   # already held once this repo/session -> allow
 
-    # First source edit here + skill hasn't run -> HOLD it once, via a structured
+    # First source edit or spawn here + skill hasn't run -> HOLD it once, via a structured
     # permissionDecision:deny. Same one-time block as before, but a much cleaner UI
     # than `exit 2`: it shows just the reason (no "PreToolUse hook error: [path]"
     # prefix) and feeds that reason to the model. FAIL OPEN if we can't record the
     # marker (don't wedge).
     : > "$held" 2>/dev/null || exit 0
-    dbg "PreToolUse: held the first edit until the skill runs"
-    reason="One quick first step before this edit: run the \`agentic-advisor\` skill to grade this repo's effort (just this once per repo, this session). Print its verdict line (> LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (…) — …), then make the same edit again — it'll go right through, and later edits won't pause. If LinearB isn't available it just defaults to MEDIUM."
+    dbg "PreToolUse: held $tool until the skill runs"
+    reason="One quick first step before ${what}: run the \`agentic-advisor\` skill to grade this repo's effort (just this once per repo, this session). Print its verdict line (> LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (…) — …), then make the same call again — it'll go right through, and later calls won't pause. If LinearB isn't available it just defaults to MEDIUM."
+    [ "$what" = "this edit" ] || reason="$reason Tell the subagent the effort level in its prompt, so the delegated work follows it."
     deny "$reason"
     ;;
 esac
