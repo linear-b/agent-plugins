@@ -123,8 +123,6 @@ case "$event" in
   UserPromptSubmit)
     prompt="$(jq -r '.prompt // .user_input // empty' <<<"$input" 2>/dev/null || true)"
     [ -z "$prompt" ] && exit 0
-    # Already graded this session -> a later prompt needs no nudge (the hold skips this case too).
-    skill_ran && { dbg "UserPromptSubmit: skip: skill already ran in this session"; exit 0; }
 
     # Decide whether this prompt looks like a code task, and build the nudge.
     msg=""
@@ -135,7 +133,7 @@ case "$event" in
     if [ -n "$ticket" ]; then
       # Tier 1: Jira ticket (primary).
       msg="This looks like the start of a repo-scoped code task (Jira ticket ${ticket} referenced). ${guidance}"
-    elif printf '%s' "$prompt" | sed -E 's/[Aa][Uu][Tt][Oo]-?[Ff][Ii][Xx]//g' | grep -qiE '\b(fix|fixes|fixing|fixed|implement|implementing|refactor|refactoring|hotfix|bug ?fix|debug|patch|endpoint|migration)\b'; then
+    elif printf '%s' "$prompt" | sed -E 's/[Aa][Uu][Tt][Oo][- ]?[Ff][Ii][Xx]//g' | grep -qiE '\b(fix|fixes|fixing|fixed|implement|implementing|refactor|refactoring|hotfix|bug ?fix|debug|patch|endpoint|migration)\b'; then
       # Tier 2: code-task keywords (fallback for ad-hoc work).
       msg="This looks like a code-writing task. ${guidance}"
     fi
@@ -198,8 +196,8 @@ case "$event" in
     # (missing file path, non-git, missing transcript, or marker write failure).
     git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 
-    # Skill already ran this session -> allow the edit.
-    skill_ran && exit 0
+    # Skill already ran this session -> allow the edit, and mark this repo handled so later prompts here aren't nudged.
+    if skill_ran; then set_marker "$dir"; : > "$marker" 2>/dev/null || true; exit 0; fi
     # Can't read the transcript -> can't confirm skill status -> fail open (allow).
     [ -n "$transcript" ] && [ -f "$transcript" ] || exit 0
 

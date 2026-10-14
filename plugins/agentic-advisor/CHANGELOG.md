@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- No more false prompt nudges: "auto-fix" / "autofix" no longer counts as a code task, and once the skill has run in a session, later prompts aren't nudged again.
+- No more false prompt nudges: "auto-fix" / "auto fix" / "autofix" no longer counts as a code task, and a repo that was already worked on after the skill ran isn't nudged again (another repo in the same session still is).
 
 ## [1.4.0] - 2026-10-13
 

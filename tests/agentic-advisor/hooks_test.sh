@@ -76,14 +76,20 @@ run "$TRIGGER" UserPromptSubmit "$(prompt 'what time is it?')"
 check "trigger: non-code prompt is silent" silent
 run "$TRIGGER" UserPromptSubmit "$(prompt 'turn on Auto-fix for the PR')"
 check "trigger: 'auto-fix' is not a code task" silent
+run "$TRIGGER" UserPromptSubmit "$(prompt 'turn on auto fix')"
+check "trigger: 'auto fix' is not a code task" silent
 run "$TRIGGER" UserPromptSubmit "$(prompt 'turn on autofix and fix the login bug')"
 check "trigger: a real fix next to autofix still nudges" nudged
 teardown
 
 setup
-add_skill
+add_skill; add_verdict
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
 run "$TRIGGER" UserPromptSubmit "$(prompt 'fix the login bug')"
-check "trigger: no nudge once the skill ran this session" silent
+check "trigger: no nudge in a repo already worked on after the skill ran" silent
+REPO2="$T/repo2"; git init -q "$REPO2"
+out="$(printf '{"hook_event_name":"UserPromptSubmit","session_id":"s1","cwd":"%s","transcript_path":"%s","prompt":"fix the login bug"}' "$REPO2" "$TRANSCRIPT" | "$TRIGGER")"; rc=$?
+check "trigger: a second repo still nudges after the skill ran" nudged
 teardown
 
 for v in 0 false OFF no; do
