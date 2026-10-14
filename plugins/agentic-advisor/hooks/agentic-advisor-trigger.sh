@@ -199,8 +199,11 @@ case "$event" in
     # Skill already ran this session -> allow the edit. If a verdict names this repo, mark it handled so later prompts here aren't nudged.
     if skill_ran; then
       set_marker "$dir"
-      name="$(basename "$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)")"
-      grep -qF "LinearB: $name " "$transcript" 2>/dev/null && { : > "$marker" 2>/dev/null || true; }
+      # The verdict uses the repo's name: check the remote's name and the folder's (clones and worktrees can differ).
+      url="$(git -C "$dir" config --get remote.origin.url 2>/dev/null)"; url="${url%.git}"
+      for name in "${url##*[/:]}" "$(basename "$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)")"; do
+        [ -n "$name" ] && grep -qF "LinearB: $name " "$transcript" 2>/dev/null && { : > "$marker" 2>/dev/null || true; break; }
+      done
       exit 0
     fi
     # Can't read the transcript -> can't confirm skill status -> fail open (allow).

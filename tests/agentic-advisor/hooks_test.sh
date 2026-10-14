@@ -84,10 +84,17 @@ check "trigger: a real fix next to autofix still nudges" nudged
 teardown
 
 setup
-add_skill; add_verdict
+add_skill; add_verdict_for other-repo
 run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
 run "$TRIGGER" UserPromptSubmit "$(prompt 'fix the login bug')"
 check "trigger: an edit in a repo the verdict didn't name doesn't mark it handled" nudged
+teardown
+
+setup
+add_skill; add_verdict_for widgets
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+run "$TRIGGER" UserPromptSubmit "$(prompt 'fix the login bug')"
+check "trigger: a verdict naming the remote repo (folder named differently) marks it handled" silent
 teardown
 
 setup
