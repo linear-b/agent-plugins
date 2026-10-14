@@ -123,6 +123,8 @@ case "$event" in
   UserPromptSubmit)
     prompt="$(jq -r '.prompt // .user_input // empty' <<<"$input" 2>/dev/null || true)"
     [ -z "$prompt" ] && exit 0
+    # Already graded this session -> a later prompt needs no nudge (the hold skips this case too).
+    skill_ran && { dbg "UserPromptSubmit: skip: skill already ran in this session"; exit 0; }
 
     # Decide whether this prompt looks like a code task, and build the nudge.
     msg=""
@@ -133,7 +135,7 @@ case "$event" in
     if [ -n "$ticket" ]; then
       # Tier 1: Jira ticket (primary).
       msg="This looks like the start of a repo-scoped code task (Jira ticket ${ticket} referenced). ${guidance}"
-    elif printf '%s' "$prompt" | grep -qiE '\b(fix|fixes|fixing|fixed|implement|implementing|refactor|refactoring|hotfix|bug ?fix|debug|patch|endpoint|migration)\b'; then
+    elif printf '%s' "$prompt" | sed -E 's/[Aa][Uu][Tt][Oo]-?[Ff][Ii][Xx]//g' | grep -qiE '\b(fix|fixes|fixing|fixed|implement|implementing|refactor|refactoring|hotfix|bug ?fix|debug|patch|endpoint|migration)\b'; then
       # Tier 2: code-task keywords (fallback for ad-hoc work).
       msg="This looks like a code-writing task. ${guidance}"
     fi

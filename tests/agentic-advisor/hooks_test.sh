@@ -74,6 +74,16 @@ teardown
 setup
 run "$TRIGGER" UserPromptSubmit "$(prompt 'what time is it?')"
 check "trigger: non-code prompt is silent" silent
+run "$TRIGGER" UserPromptSubmit "$(prompt 'turn on Auto-fix for the PR')"
+check "trigger: 'auto-fix' is not a code task" silent
+run "$TRIGGER" UserPromptSubmit "$(prompt 'turn on autofix and fix the login bug')"
+check "trigger: a real fix next to autofix still nudges" nudged
+teardown
+
+setup
+add_skill
+run "$TRIGGER" UserPromptSubmit "$(prompt 'fix the login bug')"
+check "trigger: no nudge once the skill ran this session" silent
 teardown
 
 for v in 0 false OFF no; do

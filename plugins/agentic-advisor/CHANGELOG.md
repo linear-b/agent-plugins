@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.1] - 2026-10-14
+
+### Fixed
+
+- No more false prompt nudges: "auto-fix" / "autofix" no longer counts as a code task, and once the skill has run in a session, later prompts aren't nudged again.
+
 ## [1.4.0] - 2026-10-13
 
 ### Added
