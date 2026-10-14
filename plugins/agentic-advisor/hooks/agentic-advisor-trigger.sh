@@ -196,8 +196,13 @@ case "$event" in
     # (missing file path, non-git, missing transcript, or marker write failure).
     git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 
-    # Skill already ran this session -> allow the edit, and mark this repo handled so later prompts here aren't nudged.
-    if skill_ran; then set_marker "$dir"; : > "$marker" 2>/dev/null || true; exit 0; fi
+    # Skill already ran this session -> allow the edit. If a verdict names this repo, mark it handled so later prompts here aren't nudged.
+    if skill_ran; then
+      set_marker "$dir"
+      name="$(basename "$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)")"
+      grep -qF "LinearB: $name " "$transcript" 2>/dev/null && { : > "$marker" 2>/dev/null || true; }
+      exit 0
+    fi
     # Can't read the transcript -> can't confirm skill status -> fail open (allow).
     [ -n "$transcript" ] && [ -f "$transcript" ] || exit 0
 
