@@ -4,7 +4,7 @@ Sizes the agent's coding **effort** to how fragile the target is — before it w
 
 At the start of a code task, a bundled hook auto-invokes the `agentic-advisor` skill. It reads the repo's current health (LinearB rework %, unreviewed merges, recent incidents) plus local git history on the files being touched, then grades **LOW / MEDIUM / HIGH effort** and holds the agent to it: lean and token-efficient on calm repos, defensive (smallest change, guards, tests, clarifying questions) on fragile ones. It never blocks; if LinearB data is unavailable it defaults to MEDIUM.
 
-**Docs, diagrams and changelog:** [linear-b.github.io/agent-plugins/agentic-advisor](https://linear-b.github.io/agent-plugins/agentic-advisor/)
+**Changelog:** [CHANGELOG.md](CHANGELOG.md)
 
 ## Install
 
