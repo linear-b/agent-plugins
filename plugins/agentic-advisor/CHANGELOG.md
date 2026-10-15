@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.3] - 2026-10-15
+
+### Fixed
+
+- No more false prompt nudges: "auto-fix" / "auto fix" / "autofix" no longer counts as a code task, and a repo that was already graded and worked on isn't nudged again (another repo in the same session still is).
+
 ## [1.4.2] - 2026-10-15
 
 ### Fixed

@@ -53,6 +53,7 @@ reminded() { [ "$rc" -eq 0 ] && jq -e '(.hookSpecificOutput.permissionDecision =
 denied()  { [ "$rc" -eq 0 ] && jq -e '.hookSpecificOutput.permissionDecision == "deny"' <<<"$out" >/dev/null; }
 add_skill()   { printf '%s\n' '{"timestamp":"2026-01-01T00:00:00Z","message":{"role":"assistant","model":"m","usage":{"output_tokens":10},"content":[{"type":"tool_use","name":"Skill","input":{"skill":"agentic-advisor:agentic-advisor"}}]}}' >> "$TRANSCRIPT"; }
 add_verdict() { printf '%s\n' '{"timestamp":"2026-01-01T00:00:05Z","message":{"role":"assistant","model":"m","usage":{"output_tokens":20},"content":[{"type":"text","text":"> LinearB: widgets — MEDIUM effort (rework 6.5%) — focused diff."}]}}' >> "$TRANSCRIPT"; }
+add_verdict_for() { printf '{"message":{"role":"assistant","content":[{"type":"text","text":"> LinearB: %s — MEDIUM effort (x) — y."}]}}\n' "$1" >> "$TRANSCRIPT"; }
 # Reporter posts from a detached subshell; wait briefly for the stub to record calls.
 ncalls() { find "$T/curl" -type f | wc -l | tr -d ' '; }
 await_calls() { local _; for _ in 1 2 3 4 5 6 7 8 9 10; do [ "$(ncalls)" -ge "$1" ] && return; sleep 0.2; done; }
@@ -74,6 +75,36 @@ teardown
 setup
 run "$TRIGGER" UserPromptSubmit "$(prompt 'what time is it?')"
 check "trigger: non-code prompt is silent" silent
+run "$TRIGGER" UserPromptSubmit "$(prompt 'turn on Auto-fix for the PR')"
+check "trigger: 'auto-fix' is not a code task" silent
+run "$TRIGGER" UserPromptSubmit "$(prompt 'turn on auto fix')"
+check "trigger: 'auto fix' is not a code task" silent
+run "$TRIGGER" UserPromptSubmit "$(prompt 'turn on autofix and fix the login bug')"
+check "trigger: a real fix next to autofix still nudges" nudged
+teardown
+
+setup
+add_skill; add_verdict_for other-repo
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+run "$TRIGGER" UserPromptSubmit "$(prompt 'fix the login bug')"
+check "trigger: an edit in a repo the verdict didn't name doesn't mark it handled" nudged
+teardown
+
+setup
+add_skill; add_verdict_for widgets
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+run "$TRIGGER" UserPromptSubmit "$(prompt 'fix the login bug')"
+check "trigger: a verdict naming the remote repo (folder named differently) marks it handled" silent
+teardown
+
+setup
+add_skill; add_verdict_for repo
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+run "$TRIGGER" UserPromptSubmit "$(prompt 'fix the login bug')"
+check "trigger: no nudge in a repo already graded and worked on" silent
+REPO2="$T/repo2"; git init -q "$REPO2"
+out="$(printf '{"hook_event_name":"UserPromptSubmit","session_id":"s1","cwd":"%s","transcript_path":"%s","prompt":"fix the login bug"}' "$REPO2" "$TRANSCRIPT" | "$TRIGGER")"; rc=$?
+check "trigger: a second repo still nudges after the skill ran" nudged
 teardown
 
 for v in 0 false OFF no; do
