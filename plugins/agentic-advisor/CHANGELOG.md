@@ -1,10 +1,16 @@
 # Changelog
 
-## [1.4.1] - 2026-10-14
+## [1.4.3] - 2026-10-15
 
 ### Fixed
 
 - No more false prompt nudges: "auto-fix" / "auto fix" / "autofix" no longer counts as a code task, and a repo that was already graded and worked on isn't nudged again (another repo in the same session still is).
+
+## [1.4.2] - 2026-10-15
+
+### Fixed
+
+- The 24-hour repo-health cache is now kept per LinearB environment: with `LINEARB_API_URL` pointing somewhere other than the default, a repo graded against one environment is no longer reused for another. Default (production) cache entries stay valid.
 
 ## [1.4.0] - 2026-10-13
 
