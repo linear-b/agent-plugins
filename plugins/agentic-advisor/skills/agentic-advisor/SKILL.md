@@ -48,8 +48,11 @@ Two checks that prevent wasted work — do them before any LinearB call:
 - **Already graded recently → reuse (persistent 24h cache).** The repo-level verdict is daily-stable, so compute it at most **once per repo per ~24h**, not once per task/session — this is the main token/time saver. Cache file, keyed by repo root:
 
   ```text
-  # repo-hash = first 12 chars of the repo root's sha1 (shasum on macOS, sha1sum on Linux)
-  root="$(git -C "<cwd>" rev-parse --show-toplevel)"; h="$(printf '%s' "$root" | { if command -v shasum >/dev/null 2>&1; then shasum; else sha1sum; fi; } | cut -c1-12)"
+  # repo-hash = first 12 chars of the sha1 (shasum on macOS, sha1sum on Linux) of the repo root, plus the API URL
+  # when it isn't the prod default, so grades from different LinearB environments never mix
+  root="$(git -C "<cwd>" rev-parse --show-toplevel)"; api="${LINEARB_API_URL:-https://public-api.linearb.io}"; api="${api%/}"
+  key="$root"; [ "$api" = "https://public-api.linearb.io" ] || key="$root|$api"
+  h="$(printf '%s' "$key" | { if command -v shasum >/dev/null 2>&1; then shasum; else sha1sum; fi; } | cut -c1-12)"
   f="${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor/verdicts/$h.json"   # private per-user dir, not shared /tmp
   cat "$f" 2>/dev/null   # read BEFORE any LinearB call
   ```
@@ -61,7 +64,7 @@ Two checks that prevent wasted work — do them before any LinearB call:
     ```
   - **Recompute (ignore cache) if:** it's older than 24h, you just merged/deployed to this repo, or a serious incident may have landed.
   - **⚠️ The cache stores ONLY the repo-health verdict (phase 1: rework / incidents / unreviewed merges) — daily-stable and task-independent. It does NOT store the final combined effort.** Both **change-area (file fix/revert + ownership)** and **task-complexity** are per-task and are **NEVER cached** — recompute them every task and combine `max(cached repo-health, fresh task-complexity, fresh change-area)`. So a **different task on the same repo within 24h** reuses only the cheap repo-health part and still re-grades the task-specific axes → correct effort for the new task. A cached-calm repo can still surface a HIGH task or file finding.
-  - (Within a single session you may also just reuse the verdict from earlier in the conversation without re-reading the file — same 24h logic applies.)
+  - (Within a single session you may also just reuse the verdict from earlier in the conversation without re-reading the file — same 24h logic applies, and only if `LINEARB_API_URL` hasn't changed since.)
 
 ## Repo Resolution
 
