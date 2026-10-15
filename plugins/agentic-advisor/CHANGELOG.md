@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.2] - 2026-10-15
+
+### Fixed
+
+- The 24-hour repo-health cache is now kept per LinearB environment: with `LINEARB_API_URL` pointing somewhere other than the default, a repo graded against one environment is no longer reused for another. Default (production) cache entries stay valid.
+
 ## [1.4.0] - 2026-10-13
 
 ### Added
