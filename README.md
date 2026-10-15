@@ -39,13 +39,17 @@ AI agents write code the same way whether the target is a calm, well-tested modu
 /plugin install agentic-advisor@linearb-ai
 ```
 
-**2. Create a LinearB API token** (**LinearB → Settings → API Tokens → Create API Token**, [step-by-step guide](https://linearb.helpdocs.io/article/79fmogrxw3-how-to-generate-release-api-tokens)) and export it:
+**2. Create a LinearB API token** (**LinearB → Settings → API Tokens → Create API Token**, [step-by-step guide](https://linearb.helpdocs.io/article/79fmogrxw3-how-to-generate-release-api-tokens)) and add it to `~/.claude/settings.json` under `env`, so every Claude Code session gets it however you launch it:
 
-```sh
-export LINEARB_API_TOKEN="<your LinearB API token>"
+```json
+{
+  "env": {
+    "LINEARB_API_TOKEN": "<your LinearB API token>"
+  }
+}
 ```
 
-**3. Restart Claude Code** from that shell. Hooks and the skill read the environment at launch.
+**3. Restart Claude Code.** Hooks and the skill read the environment at launch.
 
 <details>
 <summary><strong>Prefer one terminal command?</strong></summary>
@@ -54,7 +58,7 @@ export LINEARB_API_TOKEN="<your LinearB API token>"
 claude plugin marketplace add linear-b/agent-plugins && claude plugin install agentic-advisor@linearb-ai
 ```
 
-Then run `/reload-plugins` in Claude Code, or restart it if you just exported the token.
+Then run `/reload-plugins` in Claude Code, or restart it if you just added the token.
 </details>
 
 <details>
