@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.4] - 2026-10-15
+
+### Changed
+
+- Setup now puts `LINEARB_API_TOKEN` in `~/.claude/settings.json` under `env` instead of a shell `export`, so every Claude Code session gets it however it is launched (the docs and the skill's missing-token hint both say so).
+
 ## [1.4.3] - 2026-10-15
 
 ### Fixed

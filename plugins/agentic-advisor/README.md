@@ -13,7 +13,7 @@ At the start of a code task, a bundled hook auto-invokes the `agentic-advisor` s
 /plugin install agentic-advisor@linearb-ai
 ```
 
-Then export `LINEARB_API_TOKEN` (see [Setup](#usage-telemetry-on-by-default)) and restart Claude Code — hooks load at startup.
+Then add `LINEARB_API_TOKEN` to `~/.claude/settings.json` under `env` (see [Setup](#usage-telemetry-on-by-default)) and restart Claude Code — hooks load at startup.
 
 ## What you'll see
 
@@ -65,19 +65,21 @@ Decision events also carry `tags.evidence` (the verdict's evidence snippet), `ta
 
 All of this is sent **only to your own LinearB org** — the org your `LINEARB_API_TOKEN` belongs to — over HTTPS to your LinearB API (`public-api.linearb.io` unless you set `LINEARB_API_URL`); nothing goes anywhere else. It's the same data you can already see in your LinearB workspace, readable there by the metric name `agentic_advisor.effort_decision` (group by contributor / repo / effort level).
 
-**Setup** — this plugin reads LinearB entirely through the **public API** (no MCP connector). Create an org-scoped API token (**LinearB → Settings → API Tokens → Create API Token**) and export it — the *same* token both reads health signals and reports telemetry:
+**Setup** — this plugin reads LinearB entirely through the **public API** (no MCP connector). Create an org-scoped API token (**LinearB → Settings → API Tokens → Create API Token**) and add it to `~/.claude/settings.json` under `env`; the *same* token both reads health signals and reports telemetry. Rolling out to the whole org? Put the same `env` block in your Claude Code managed settings instead (see the repo README).
 
-```sh
-export LINEARB_API_TOKEN="<your LinearB API token>"
-# On-prem or regional LinearB? Point the plugin at your API (default https://public-api.linearb.io):
-# export LINEARB_API_URL="https://<your-linearb-api-host>"
+```json
+{
+  "env": {
+    "LINEARB_API_TOKEN": "<your LinearB API token>"
+  }
+}
 ```
 
-Then **launch Claude Code from a shell that has it exported** (hooks and the skill read the env at launch — a token added to an already-running session isn't seen until you restart; if you rely on `~/.zshrc`, start Claude from an interactive shell). The token is handed to `curl` on stdin, never as a command-line argument, and it is never printed or logged. **Without a token the skill degrades to MEDIUM effort** (it never blocks).
+On-prem or regional LinearB? Also add `"LINEARB_API_URL": "https://<your-linearb-api-host>"` (default `https://public-api.linearb.io`). Then **restart Claude Code** (hooks and the skill read the env at launch). If your org's managed settings already set `LINEARB_API_TOKEN`, that value wins over yours. The token is handed to `curl` on stdin, never as a command-line argument, and it is never printed or logged. **Without a token the skill degrades to MEDIUM effort** (it never blocks).
 
 ## Requirements
 
-- **`LINEARB_API_TOKEN`** exported (see Setup) — used for both reading signals and reporting. Without it, the skill degrades to MEDIUM rather than failing.
+- **`LINEARB_API_TOKEN`** set (see Setup) — used for both reading signals and reporting. Without it, the skill degrades to MEDIUM rather than failing.
 - `jq`, `git`, and `curl` on PATH (used by the bundled hooks and the skill's API calls).
 - `python3` (optional): without it grades are still reported, but token counts and grading time are left out.
 - No MCP connector required.
