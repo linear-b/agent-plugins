@@ -68,7 +68,7 @@ Two checks that prevent wasted work — do them before any LinearB call:
 
 ## Repo Resolution
 
-Infer the repo from the user's message, current working directory, or git remote. The public API has no server-side name filter, so fetch the repository list once and match **locally** — prefer the local git remote URL (exact) over the name:
+Infer the repo from the current working directory's git remote, and look it up by that **exact URL** (`http_url`). The API returns only that repository; an Agentic Advisor key may not list the others:
 
 ```bash
 raw="$(git -C "<cwd>" config --get remote.origin.url 2>/dev/null)"
@@ -81,14 +81,13 @@ case "$url" in *.git) : ;; *) url="${url%/}.git" ;; esac
 rest="${url#*://}"; host="${rest%%/*}"   # drop user:token@ so a credential is never matched or passed to jq
 case "$host" in *@*) url="${url%%://*}://${host##*@}${rest#"$host"}" ;; esac
 
-curl -fsS -m 20 "${AUTH[@]}" <<<"x-api-key: ${LINEARB_API_TOKEN}" "$LB/api/v1/repositories" \
-  | jq -r --arg u "$url" --arg n "<repo-name>" '
-      ( map(select((.http_url // "" | ascii_downcase) == ($u | ascii_downcase))) | .[0] )
-      // ( map(select(.name == $n)) | .[0] )
+curl -fsS -m 20 -G "${AUTH[@]}" <<<"x-api-key: ${LINEARB_API_TOKEN}" --data-urlencode "http_url=$url" "$LB/api/v1/repositories" \
+  | jq -r --arg u "$url" '
+      map(select((.http_url // "" | sub("://[^/@]*@"; "://") | ascii_downcase) == ($u | ascii_downcase))) | .[0]
       | if . == null then empty else {id, name, http_url} end'
 ```
 
-Store `repo_id` (`.id`). **Empty output from a successful call = not found** → fall back to org-level incidents only; don't block. (This list is not reliably paginated — `limit` works but `offset`/`page` may hang — so on a very large org a repo could be missing from the response; treat a miss as "resolution failed", not "healthy".)
+Store `repo_id` (`.id`). **Empty output from a successful call = not found** → fall back to org-level incidents only; don't block. Treat a miss as "resolution failed", not "healthy".
 
 ## Signal Gathering
 
@@ -314,7 +313,7 @@ Keep this skill lightweight. Do not print a full report unless the user asks for
 ## Error Handling
 
 - **No `LINEARB_API_TOKEN`** → grade MEDIUM, say `LINEARB_API_TOKEN not set` in the verdict, tell the user how to set it (one sentence), continue. Never block. Users otherwise mistake a silent MEDIUM for a working setup.
-- If the repositories list call times out or the repo isn't found → run org-level incidents only; don't block.
+- If the repository lookup times out or the repo isn't found → run org-level incidents only; don't block.
 - `POST /api/v1/incidents/search` can be slow → **retry once** before marking incidents unknown.
 - Only pass `repository_urls` with the exact `.git` URL — a mismatch can error rather than return empty.
 - If measurements fails or returns nulls → skip the rework/quality signals and lean on incidents — a failed call is *unavailable*, so it can never support LOW.
