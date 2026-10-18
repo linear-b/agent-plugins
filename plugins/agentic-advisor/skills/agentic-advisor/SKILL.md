@@ -74,7 +74,7 @@ Infer the repo from the current working directory's git remote, and look it up b
 raw="$(git -C "<cwd>" config --get remote.origin.url 2>/dev/null)"
 case "$raw" in
   git@*:*)     url="https://$(printf '%s' "${raw#git@}" | sed 's#:#/#')" ;;
-  ssh://git@*) url="https://${raw#ssh://git@}" ;;
+  ssh://git@*) rest="${raw#ssh://git@}"; host="${rest%%/*}"; url="https://${host%%:*}/${rest#*/}" ;;   # drop an SSH port: the HTTPS URL has none
   *)           url="$raw" ;;
 esac
 case "$url" in *.git) : ;; *) url="${url%/}.git" ;; esac
