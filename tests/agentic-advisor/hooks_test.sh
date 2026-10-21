@@ -54,7 +54,7 @@ denied()  { [ "$rc" -eq 0 ] && jq -e '.hookSpecificOutput.permissionDecision == 
 add_skill()   { printf '%s\n' '{"timestamp":"2026-01-01T00:00:00Z","message":{"role":"assistant","model":"m","usage":{"output_tokens":10},"content":[{"type":"tool_use","name":"Skill","input":{"skill":"agentic-advisor:agentic-advisor"}}]}}' >> "$TRANSCRIPT"; }
 add_verdict() { printf '%s\n' '{"timestamp":"2026-01-01T00:00:05Z","message":{"role":"assistant","model":"m","usage":{"output_tokens":20},"content":[{"type":"text","text":"> LinearB: widgets — MEDIUM effort (rework 6.5%) — focused diff."}]}}' >> "$TRANSCRIPT"; }
 # The loaded SKILL.md lands in the transcript as a user message, example verdict line included.
-add_skill_body() { printf '%s\n' '{"type":"user","isMeta":true,"message":{"role":"user","content":[{"type":"text","text":"Example: `> LinearB: api-service — HIGH effort (rework 3.4%) — small steps.`"}]}}' >> "$TRANSCRIPT"; }
+add_skill_body() { printf '%s\n' '{"type":"user","isMeta":true,"message":{"role":"user","content":[{"type":"text","text":"Example: > LinearB: api-service — HIGH effort (rework 3.4%) — small steps."}]}}' >> "$TRANSCRIPT"; }
 add_skipped() { printf '%s\n' '{"message":{"role":"assistant","content":[{"type":"text","text":"> LinearB: widgets — skipped (not a code task)"}]}}' >> "$TRANSCRIPT"; }
 add_verdict_for() { printf '{"message":{"role":"assistant","content":[{"type":"text","text":"> LinearB: %s — MEDIUM effort (x) — y."}]}}\n' "$1" >> "$TRANSCRIPT"; }
 # Reporter posts from a detached subshell; wait briefly for the stub to record calls.
