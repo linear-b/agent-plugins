@@ -22,6 +22,7 @@ Right after the repo sweep, your first assistant text **must be this verdict lin
 - **A hook parses this exact line** to record the decision. Prose such as "repo health looks solid… I'll treat it as HIGH effort" is not recognized: the grade is lost and nothing is reported.
 - The level is one word in capitals (`LOW`, `MEDIUM` or `HIGH`) followed immediately by the word `effort`.
 - Explanation may follow on later lines, but the verdict line comes first and is never reworded.
+- **No code will change?** Print `> LinearB: <repo> — skipped (not a code task)` instead of a grade and stop (see the cheap exits). Nothing is reported.
 - If you aren't writing visible text at this point, record it with one Bash call instead: `printf '%s\n' '> LinearB: <repo> — <LEVEL> effort (<evidence>) — <plan>'`. If neither exists, a hook reminds you on your next file read or edit.
 
 Example: `> LinearB: api-service — HIGH effort (rework 3.4%, calm repo — but auth refactor with wide blast radius) — small behavior-preserving steps, tests green, confirm scope first.`
@@ -44,7 +45,8 @@ set -o pipefail   # with curl -f, a failed request fails the whole pipeline inst
 
 Two checks that prevent wasted work — do them before any LinearB call:
 
-- **Trivial edit → skip everything.** If the task changes **no code behavior** (comments, docs, formatting/whitespace, a pure rename), skip signal gathering entirely: effort is **LOW**, add no defensive guards (there's no logic to protect), and don't call LinearB at all — this holds **even on a fragile repo**. Anything that changes behavior is **not** trivial and warrants the sweep below — note that a **constant-value change counts as behavioral** (e.g. a timeout, retry count, or feature-flag default), as does any conditional or logic edit.
+- **Not a code task → no grade at all.** If the task will not modify any file (reading or explaining code, answering a question, reviewing a doc, ticket or screenshot, drafting a reply or message in chat), don't grade it: print `> LinearB: <repo> — skipped (not a code task)`, call nothing, and work with your normal care. A grade measures the risk of a code change; a LOW here would wrongly tell you to go light on accuracy. If the task later turns into a file edit, run the sweep then, before the first edit (a hook holds that edit until a real grade exists).
+- **Trivial code edit → LOW, skip everything.** If the task edits any file but changes **no code behavior** (code comments, doc files, formatting/whitespace, a pure rename), skip signal gathering entirely: effort is **LOW**, add no defensive guards (there's no logic to protect), and don't call LinearB at all — this holds **even on a fragile repo**. Anything that changes behavior is **not** trivial and warrants the sweep below — note that a **constant-value change counts as behavioral** (e.g. a timeout, retry count, or feature-flag default), as does any conditional or logic edit.
 - **Already graded recently → reuse (persistent 24h cache).** The repo-level verdict is daily-stable, so compute it at most **once per repo per ~24h**, not once per task/session — this is the main token/time saver. Cache file, keyed by repo root:
 
   ```text
@@ -259,6 +261,8 @@ Phase 2 was only ever deferred because it needs the target file paths. So:
 **HARD RULE either way:** on a phase-2-gated task, the file-level finding must be printed **before the first `Edit`/`Write` to a target file** — combined into the phase-1 verdict when the file is known, or as the follow-up line when it isn't. Measure and report first, edit second. Skip only for trivial edits.
 
 ## Coding Posture
+
+The effort level governs **code changes only**: it never lowers the care, accuracy or thoroughness of reading, analysis, answers or writing.
 
 Use the effort level to guide the implementation silently. The aim is to **spend effort proportional to repo health** — go light (saving tokens and time) on calm repos, dig in on fragile ones. Don't waste effort.
 

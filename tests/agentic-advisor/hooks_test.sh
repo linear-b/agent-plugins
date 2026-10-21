@@ -53,6 +53,9 @@ reminded() { [ "$rc" -eq 0 ] && jq -e '(.hookSpecificOutput.permissionDecision =
 denied()  { [ "$rc" -eq 0 ] && jq -e '.hookSpecificOutput.permissionDecision == "deny"' <<<"$out" >/dev/null; }
 add_skill()   { printf '%s\n' '{"timestamp":"2026-01-01T00:00:00Z","message":{"role":"assistant","model":"m","usage":{"output_tokens":10},"content":[{"type":"tool_use","name":"Skill","input":{"skill":"agentic-advisor:agentic-advisor"}}]}}' >> "$TRANSCRIPT"; }
 add_verdict() { printf '%s\n' '{"timestamp":"2026-01-01T00:00:05Z","message":{"role":"assistant","model":"m","usage":{"output_tokens":20},"content":[{"type":"text","text":"> LinearB: widgets — MEDIUM effort (rework 6.5%) — focused diff."}]}}' >> "$TRANSCRIPT"; }
+# The loaded SKILL.md lands in the transcript as a user message, example verdict line included.
+add_skill_body() { printf '%s\n' '{"type":"user","isMeta":true,"message":{"role":"user","content":[{"type":"text","text":"Example: > LinearB: api-service — HIGH effort (rework 3.4%) — small steps."}]}}' >> "$TRANSCRIPT"; }
+add_skipped() { printf '%s\n' '{"message":{"role":"assistant","content":[{"type":"text","text":"> LinearB: widgets — skipped (not a code task)"}]}}' >> "$TRANSCRIPT"; }
 add_verdict_for() { printf '{"message":{"role":"assistant","content":[{"type":"text","text":"> LinearB: %s — MEDIUM effort (x) — y."}]}}\n' "$1" >> "$TRANSCRIPT"; }
 # Reporter posts from a detached subshell; wait briefly for the stub to record calls.
 ncalls() { find "$T/curl" -type f | wc -l | tr -d ' '; }
@@ -172,6 +175,21 @@ check "trigger: skill ran without verdict -> reminder, not a block" reminded
 teardown
 
 setup
+add_skill; add_skipped
+run "$TRIGGER" PreToolUse "$(tool Read app.js)"
+check "trigger: a skipped (not a code task) line counts as answered -> no reminder" silent
+teardown
+
+setup
+add_skill; add_skill_body; add_skipped
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "trigger: an edit after a skipped (not a code task) run is held until a real grade" denied
+add_verdict
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "trigger: ...and goes through once the grade is printed" silent
+teardown
+
+setup
 add_skill; add_verdict
 run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
 check "trigger: verdict printed -> edit allowed" silent
@@ -193,6 +211,13 @@ add_skill; add_verdict
 run "$REPORT" SessionEnd
 await_calls 2 # decision + tokens, posted concurrently
 check "report: SessionEnd backfills a missed DECISION" backfilled
+teardown
+
+setup
+add_skill; add_skipped
+run "$REPORT" SessionEnd
+sleep 0.5 # a wrong post would arrive from a detached subshell
+check "report: a skipped (not a code task) session reports nothing" no_calls
 teardown
 
 # Both exit before any background post, so no wait is needed.
