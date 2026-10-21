@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.5] - 2026-10-18
+
+### Changed
+
+- The skill looks the repository up by its exact git remote URL (`/api/v1/repositories?http_url=`) instead of downloading the org's whole repository list, so it works with a limited Agentic Advisor API key.
+- An SSH remote with a port (`ssh://git@host:2222/…`) now maps to the right HTTPS URL for that lookup.
+
 ## [1.4.4] - 2026-10-15
 
 ### Changed
