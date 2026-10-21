@@ -196,8 +196,9 @@ case "$event" in
     # (missing file path, non-git, missing transcript, or marker write failure).
     git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 
-    # Skill already ran this session -> allow the edit. If a verdict names this repo, mark it handled so later prompts here aren't nudged.
-    if skill_ran; then
+    # Skill already graded this session -> allow the edit. A "skipped (not a code task)" line alone doesn't count: editing now is code work.
+    # If a verdict names this repo, mark it handled so later prompts here aren't nudged.
+    if skill_ran && grep -qE 'LinearB: .+ (LOW|MEDIUM|HIGH) effort' "$transcript" 2>/dev/null; then
       set_marker "$dir"
       # The verdict uses the repo's name: check the remote's name and the folder's (clones and worktrees can differ).
       url="$(git -C "$dir" config --get remote.origin.url 2>/dev/null)"; url="${url%.git}"

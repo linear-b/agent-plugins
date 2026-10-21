@@ -179,6 +179,15 @@ check "trigger: a skipped (not a code task) line counts as answered -> no remind
 teardown
 
 setup
+add_skill; add_skipped
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "trigger: an edit after a skipped (not a code task) run is held until a real grade" denied
+add_verdict
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "trigger: ...and goes through once the grade is printed" silent
+teardown
+
+setup
 add_skill; add_verdict
 run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
 check "trigger: verdict printed -> edit allowed" silent
