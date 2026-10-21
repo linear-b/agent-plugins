@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.6] - 2026-10-21
+
+### Changed
+
+- A task that changes no code (reading, answering a question, reviewing a doc or screenshot, writing a comment) is no longer graded LOW: the skill prints `> LinearB: <repo> — skipped (not a code task)`, makes no calls, reports nothing, and the agent works with its normal care. LOW stays for trivial code edits (comments, formatting, renames).
+- The skill states that the effort level governs code changes only and never lowers the care of reading, analysis or writing.
+
 ## [1.4.5] - 2026-10-18
 
 ### Changed
