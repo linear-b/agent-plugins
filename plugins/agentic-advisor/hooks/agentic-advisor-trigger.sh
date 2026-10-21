@@ -52,8 +52,10 @@ skill_ran() {
 
 # Is the LATEST advisor Skill call still missing its verdict (assistant text, or the
 # hold's `printf` Bash call)? Prints "pending" or "ok"; prints nothing on parse failure.
-verdict_state() {
-  jq -rs --arg n "agentic-advisor" --arg re 'LinearB: .+ ((LOW|MEDIUM|HIGH) effort|skipped \(not a code task\))' '
+VERDICT_RE='LinearB: .+ ((LOW|MEDIUM|HIGH) effort|skipped \(not a code task\))'
+GRADED_RE='LinearB: .+ (LOW|MEDIUM|HIGH) effort'
+verdict_state() { # $1 = the verdict regex required (default: a grade or a skip)
+  jq -rs --arg n "agentic-advisor" --arg re "${1:-$VERDICT_RE}" '
     [.[] | select(.message.role? == "assistant") | .message.content? // [] | .[]?] as $c
     | [$c | to_entries[] | select(.value.type? == "tool_use" and .value.name? == "Skill"
         and ((.value.input.skill? // "") | tostring | contains($n))) | .key] as $sk
@@ -198,7 +200,8 @@ case "$event" in
 
     # Skill already graded this session -> allow the edit. A "skipped (not a code task)" line alone doesn't count: editing now is code work.
     # If a verdict names this repo, mark it handled so later prompts here aren't nudged.
-    if skill_ran && grep -qE 'LinearB: .+ (LOW|MEDIUM|HIGH) effort' "$transcript" 2>/dev/null; then
+    # "pending" only when parsed and no grade yet; a parse failure prints nothing and fails open.
+    if skill_ran && [ "$(verdict_state "$GRADED_RE")" != "pending" ]; then
       set_marker "$dir"
       # The verdict uses the repo's name: check the remote's name and the folder's (clones and worktrees can differ).
       url="$(git -C "$dir" config --get remote.origin.url 2>/dev/null)"; url="${url%.git}"
