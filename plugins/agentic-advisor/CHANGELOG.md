@@ -2,6 +2,10 @@
 
 ## [1.4.6] - 2026-10-21
 
+### Added
+
+- A plugin icon (the LinearB mark) for the plugin directory.
+
 ### Changed
 
 - A task that changes no code (reading, answering a question, reviewing a doc or screenshot, writing a comment) is no longer graded LOW: the skill prints `> LinearB: <repo> — skipped (not a code task)`, makes no calls, reports nothing, and the agent works with its normal care. LOW stays for trivial code edits (comments, formatting, renames).
