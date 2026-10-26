@@ -34,7 +34,7 @@ The agent prints a one-line verdict before writing code, e.g.:
 
 ## Triggers
 
-Auto-fires (once per repo, per session) on a Jira ticket in the prompt, code-task keywords (fix / implement / refactor…), or the first source-file edit or subagent spawn in a git repo (read-only agents like Explore don't count). Skips questions, doc/text edits, and files outside a git repo. If the grade was decided but never printed (common at lower effort levels, where the model keeps it in its thinking), the agent gets a one-time reminder (not a block) on its next file read or edit to record the verdict line.
+Auto-fires (once per repo, per session) on a Jira ticket in the prompt, code-task keywords (fix / implement / refactor…), or the first source-file edit or subagent spawn in a git repo (read-only agents like Explore don't count). Skips questions, doc/text edits, and files outside a git repo. If the grade was decided but never printed (common at lower effort levels, where the model keeps it in its thinking or writes it as prose), the agent gets a reminder on its next file read, and its source edits and subagent spawns are held until the verdict line exists (at most 3 times per repo and session, so it never walls).
 
 ## Usage telemetry (on by default)
 
