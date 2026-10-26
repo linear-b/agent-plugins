@@ -167,6 +167,19 @@ check "trigger: an Edit of SKILL.md is not a fallback read, so a source edit is 
 teardown
 
 setup
+printf '%s\n' '{"message":{"role":"assistant","content":[{"type":"tool_use","name":"Read","input":{"file_path":"/x/app.js"}},{"type":"tool_use","name":"Edit","input":{"file_path":"/x/plugins/agentic-advisor/skills/agentic-advisor/SKILL.md"}}]}}' >> "$TRANSCRIPT"
+add_verdict
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "trigger: a Read of another file batched with an Edit of SKILL.md is not a fallback read" denied
+teardown
+
+setup
+add_skill; add_verdict; add_skill_read
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "trigger: re-reading SKILL.md after the verdict keeps the repo graded" silent
+teardown
+
+setup
 run "$TRIGGER" PreToolUse "$(tool Edit README.md)"
 check "trigger: docs edit is never held" silent
 teardown

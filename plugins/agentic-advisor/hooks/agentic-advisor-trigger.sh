@@ -45,10 +45,15 @@ transcript="$(jq -r '.transcript_path // empty' <<<"$input" 2>/dev/null || true)
 # Has the agentic-advisor skill ACTUALLY run in this session? (a real Skill
 # tool_use in the transcript, not just text that quotes it). Used to hard-gate
 # the first source edit so the effort grade is computed BEFORE code is written.
+read_ran() { # the agent read the skill's SKILL.md (the fallback when the Skill tool lists no skill)
+  [ -n "$(jq -r --arg re '/skills/[^/]*agentic-advisor[^/]*/SKILL\.md$' 'select(.message.role? == "assistant") | .message.content? // [] | .[]?
+      | select(.type? == "tool_use" and .name? == "Read" and ((.input.file_path? // "") | tostring | test($re))) | "y"' \
+      "$transcript" 2>/dev/null | head -n 1)" ]
+}
 skill_ran() {
   [ -n "$transcript" ] && [ -f "$transcript" ] || return 1
   grep -qE '"skill"[[:space:]]*:[[:space:]]*"[^"]*agentic-advisor[^"]*"' "$transcript" 2>/dev/null \
-    || grep '"role":"assistant"' "$transcript" 2>/dev/null | grep -E '"name"[[:space:]]*:[[:space:]]*"Read"' | grep -qE '"file_path"[[:space:]]*:[[:space:]]*"[^"]*/skills/[^"/]*agentic-advisor[^"/]*/SKILL\.md"'
+    || read_ran
 }
 
 # Is the LATEST advisor Skill call still missing its verdict (assistant text, or the
@@ -58,10 +63,11 @@ GRADED_RE='LinearB: .+ (LOW|MEDIUM|HIGH) effort'
 verdict_state() { # $1 = the verdict regex required (default: a grade or a skip)
   jq -rs --arg n "agentic-advisor" --arg re "${1:-$VERDICT_RE}" '
     [.[] | select(.message.role? == "assistant") | .message.content? // [] | .[]?] as $c
-    | [$c | to_entries[] | select(.value.type? == "tool_use" and (
-        (.value.name? == "Skill" and ((.value.input.skill? // "") | tostring | contains($n)))
-        or (.value.name? == "Read" and ((.value.input.file_path? // "") | tostring
-            | test("/skills/[^/]*" + $n + "[^/]*/SKILL\\.md$"))))) | .key] as $sk
+    | [$c | to_entries[] | select(.value.type? == "tool_use" and .value.name? == "Skill"
+        and ((.value.input.skill? // "") | tostring | contains($n))) | .key] as $calls
+    | [$c | to_entries[] | select(.value.type? == "tool_use" and .value.name? == "Read"
+        and ((.value.input.file_path? // "") | tostring | test("/skills/[^/]*" + $n + "[^/]*/SKILL\\.md$"))) | .key] as $reads
+    | (if ($calls | length) > 0 then $calls else $reads[0:1] end) as $sk
     | if ($sk | length) == 0 then "ok"
       elif ($c[($sk[-1] + 1):] | any(
           (.type? == "text" and ((.text? // "") | test($re)))

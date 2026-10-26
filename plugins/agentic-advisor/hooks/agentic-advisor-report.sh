@@ -75,6 +75,11 @@ input="$(cat)"
 event="$(jq -r '.hook_event_name // empty'      <<<"$input" 2>/dev/null || true)"
 session_id="$(jq -r '.session_id // empty'      <<<"$input" 2>/dev/null || true)"
 transcript="$(jq -r '.transcript_path // empty' <<<"$input" 2>/dev/null || true)"
+read_ran() { # the agent read the skill's SKILL.md (the fallback when the Skill tool lists no skill)
+  [ -n "$(jq -r --arg re '/skills/[^/]*agentic-advisor[^/]*/SKILL\.md$' 'select(.message.role? == "assistant") | .message.content? // [] | .[]?
+      | select(.type? == "tool_use" and .name? == "Read" and ((.input.file_path? // "") | tostring | test($re))) | "y"' \
+      "$transcript" 2>/dev/null | head -n 1)" ]
+}
 cwd="$(jq -r '.cwd // empty'                     <<<"$input" 2>/dev/null || true)"
 effort_actual="$(jq -r '.effort.level // empty'  <<<"$input" 2>/dev/null || true)"
 if [ -z "$transcript" ] || [ ! -f "$transcript" ]; then
@@ -116,7 +121,7 @@ touch "$state" 2>/dev/null || true
 # per-turn Stop that has nothing new to report costs only a grep or two, not a full
 # transcript parse. (The whole graded path requires the skill to have actually run.)
 if [ "$label" = "graded" ]; then
-  { grep -qE '"skill"[[:space:]]*:[[:space:]]*"[^"]*agentic-advisor[^"]*"' "$transcript" 2>/dev/null || grep '"role":"assistant"' "$transcript" 2>/dev/null | grep -E '"name"[[:space:]]*:[[:space:]]*"Read"' | grep -qE '"file_path"[[:space:]]*:[[:space:]]*"[^"]*/skills/[^"/]*agentic-advisor[^"/]*/SKILL\.md"'; } || { [ "$event" = "SessionEnd" ] && dbg "SessionEnd: skip: skill never ran in this session"; exit 0; }
+  { grep -qE '"skill"[[:space:]]*:[[:space:]]*"[^"]*agentic-advisor[^"]*"' "$transcript" 2>/dev/null || read_ran; } || { [ "$event" = "SessionEnd" ] && dbg "SessionEnd: skip: skill never ran in this session"; exit 0; }
   if [ "$event" = "Stop" ]; then
     # Has the set of verdict lines changed since we last processed a Stop? SKILL.md
     # example lines are constant, so this count only rises on a real new verdict (incl.
@@ -284,7 +289,7 @@ if [ "$label" = "baseline" ]; then
   # should never run. If it ran anyway (grep finds a real Skill invocation), flag it —
   # a contaminated baseline must be excluded from the control arm.
   contaminated="false"
-  { grep -qE '"skill"[[:space:]]*:[[:space:]]*"[^"]*agentic-advisor[^"]*"' "$transcript" 2>/dev/null || grep '"role":"assistant"' "$transcript" 2>/dev/null | grep -E '"name"[[:space:]]*:[[:space:]]*"Read"' | grep -qE '"file_path"[[:space:]]*:[[:space:]]*"[^"]*/skills/[^"/]*agentic-advisor[^"/]*/SKILL\.md"'; } && contaminated="true"
+  { grep -qE '"skill"[[:space:]]*:[[:space:]]*"[^"]*agentic-advisor[^"]*"' "$transcript" 2>/dev/null || read_ran; } && contaminated="true"
   payload="$(jq -n \
     --arg m "$METRIC_NAME" --arg src "$SOURCE" --argjson ts "$ts" \
     --arg repo "$repo" --arg email "$email" --arg repourl "$repo_url" --arg branch "$branch" \
