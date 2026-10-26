@@ -48,7 +48,7 @@ transcript="$(jq -r '.transcript_path // empty' <<<"$input" 2>/dev/null || true)
 skill_ran() {
   [ -n "$transcript" ] && [ -f "$transcript" ] || return 1
   grep -qE '"skill"[[:space:]]*:[[:space:]]*"[^"]*agentic-advisor[^"]*"' "$transcript" 2>/dev/null \
-    || grep -qE '"file_path"[[:space:]]*:[[:space:]]*"[^"]*/skills/[^"/]*agentic-advisor[^"/]*/SKILL\.md"' "$transcript" 2>/dev/null
+    || grep '"role":"assistant"' "$transcript" 2>/dev/null | grep -E '"name"[[:space:]]*:[[:space:]]*"Read"' | grep -qE '"file_path"[[:space:]]*:[[:space:]]*"[^"]*/skills/[^"/]*agentic-advisor[^"/]*/SKILL\.md"'
 }
 
 # Is the LATEST advisor Skill call still missing its verdict (assistant text, or the
@@ -161,7 +161,7 @@ case "$event" in
     case "$tool" in Read|Grep|Glob) is_read=1 ;; *) is_read=0 ;; esac
     if [ "$is_read" = 1 ] && skill_ran; then
       # Count only assistant Skill calls (same thing verdict_state indexes), not echoes elsewhere.
-      runs="$(grep '"role":"assistant"' "$transcript" 2>/dev/null | grep -cE '"skill"[[:space:]]*:[[:space:]]*"[^"]*'"agentic-advisor"'[^"]*"')"
+      runs="$(grep '"role":"assistant"' "$transcript" 2>/dev/null | grep -cE '"skill"[[:space:]]*:[[:space:]]*"[^"]*'"agentic-advisor"'[^"]*"|"name"[[:space:]]*:[[:space:]]*"Read".*/skills/[^"/]*'"agentic-advisor"'[^"/]*/SKILL\.md"')"
       vdone="$marker_dir/${session_id:-default}.${runs:-0}.vdone"
       if [ ! -f "$vdone" ]; then
         state="$(verdict_state)"

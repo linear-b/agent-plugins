@@ -160,6 +160,13 @@ check "trigger: a fallback read without a verdict line is still held" wants_line
 teardown
 
 setup
+printf '%s\n' '{"message":{"role":"assistant","content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/x/plugins/agentic-advisor/skills/agentic-advisor/SKILL.md"}}]}}' >> "$TRANSCRIPT"
+add_verdict
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "trigger: an Edit of SKILL.md is not a fallback read, so a source edit is still held" denied
+teardown
+
+setup
 run "$TRIGGER" PreToolUse "$(tool Edit README.md)"
 check "trigger: docs edit is never held" silent
 teardown
