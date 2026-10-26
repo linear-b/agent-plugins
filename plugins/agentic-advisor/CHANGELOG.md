@@ -6,7 +6,7 @@
 
 - The grade-before-edit hold now repeats until the verdict line is printed (at most 3 holds per repo and session, so it never walls). A prose summary of the grade, or switching to another file, no longer gets past it.
 - Edits and subagent spawns go to that hold instead of a one-time reminder that let the edit through.
-- The hook messages name the skill's SKILL.md file, so the agent can still grade when the skill is missing from its skill list.
+- The hook messages name the skill's SKILL.md file (only when it exists), so the agent can still grade when the skill is missing from its skill list. Reading that file counts as running the skill for the hold and the report.
 
 ## [1.4.6] - 2026-10-21
 

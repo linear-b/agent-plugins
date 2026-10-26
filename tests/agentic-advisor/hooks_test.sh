@@ -55,6 +55,8 @@ add_skill()   { printf '%s\n' '{"timestamp":"2026-01-01T00:00:00Z","message":{"r
 add_verdict() { printf '%s\n' '{"timestamp":"2026-01-01T00:00:05Z","message":{"role":"assistant","model":"m","usage":{"output_tokens":20},"content":[{"type":"text","text":"> LinearB: widgets — MEDIUM effort (rework 6.5%) — focused diff."}]}}' >> "$TRANSCRIPT"; }
 # The loaded SKILL.md lands in the transcript as a user message, example verdict line included.
 add_skill_body() { printf '%s\n' '{"type":"user","isMeta":true,"message":{"role":"user","content":[{"type":"text","text":"Example: > LinearB: api-service — HIGH effort (rework 3.4%) — small steps."}]}}' >> "$TRANSCRIPT"; }
+# The fallback: the agent reads the skill's SKILL.md instead of calling the Skill tool.
+add_skill_read() { printf '%s\n' '{"timestamp":"2026-01-01T00:00:00Z","message":{"role":"assistant","model":"m","usage":{"output_tokens":10},"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/x/plugins/agentic-advisor/skills/agentic-advisor/SKILL.md"}}]}}' >> "$TRANSCRIPT"; }
 add_skipped() { printf '%s\n' '{"message":{"role":"assistant","content":[{"type":"text","text":"> LinearB: widgets — skipped (not a code task)"}]}}' >> "$TRANSCRIPT"; }
 add_verdict_for() { printf '{"message":{"role":"assistant","content":[{"type":"text","text":"> LinearB: %s — MEDIUM effort (x) — y."}]}}\n' "$1" >> "$TRANSCRIPT"; }
 # Reporter posts from a detached subshell; wait briefly for the stub to record calls.
@@ -146,6 +148,18 @@ check "trigger: a prose-only grade is held, asking for the verdict line" wants_l
 teardown
 
 setup
+add_skill_read; add_skill_body; add_verdict
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "trigger: grading via the SKILL.md fallback (no Skill call) releases the edit" silent
+teardown
+
+setup
+add_skill_read; add_skill_body
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "trigger: a fallback read without a verdict line is still held" wants_line
+teardown
+
+setup
 run "$TRIGGER" PreToolUse "$(tool Edit README.md)"
 check "trigger: docs edit is never held" silent
 teardown
@@ -230,6 +244,13 @@ add_skill; add_skipped
 run "$REPORT" SessionEnd
 sleep 0.5 # a wrong post would arrive from a detached subshell
 check "report: a skipped (not a code task) session reports nothing" no_calls
+teardown
+
+setup
+add_skill_read; add_verdict
+run "$REPORT" Stop
+await_calls 1
+check "report: a grade made via the SKILL.md fallback is reported" one_decision
 teardown
 
 # Both exit before any background post, so no wait is needed.

@@ -116,7 +116,7 @@ touch "$state" 2>/dev/null || true
 # per-turn Stop that has nothing new to report costs only a grep or two, not a full
 # transcript parse. (The whole graded path requires the skill to have actually run.)
 if [ "$label" = "graded" ]; then
-  grep -qE '"skill"[[:space:]]*:[[:space:]]*"[^"]*agentic-advisor[^"]*"' "$transcript" 2>/dev/null || { [ "$event" = "SessionEnd" ] && dbg "SessionEnd: skip: skill never ran in this session"; exit 0; }
+  { grep -qE '"skill"[[:space:]]*:[[:space:]]*"[^"]*agentic-advisor[^"]*"' "$transcript" 2>/dev/null || grep -qE '"file_path"[[:space:]]*:[[:space:]]*"[^"]*/skills/[^"/]*agentic-advisor[^"/]*/SKILL\.md"' "$transcript" 2>/dev/null; } || { [ "$event" = "SessionEnd" ] && dbg "SessionEnd: skip: skill never ran in this session"; exit 0; }
   if [ "$event" = "Stop" ]; then
     # Has the set of verdict lines changed since we last processed a Stop? SKILL.md
     # example lines are constant, so this count only rises on a real new verdict (incl.
@@ -237,8 +237,9 @@ for line in open(sys.argv[1]):
     for x in content:
         if not isinstance(x, dict): continue
         typ = x.get("type")
-        if typ == "tool_use" and x.get("name") == "Skill" \
-           and "agentic-advisor" in str((x.get("input") or {}).get("skill", "")):
+        # The skill starts with its Skill call, or with a Read of its SKILL.md (the fallback).
+        if typ == "tool_use" and ((x.get("name") == "Skill" and "agentic-advisor" in str((x.get("input") or {}).get("skill", "")))
+                                  or (x.get("name") == "Read" and re.search(r"/skills/[^/]*agentic-advisor[^/]*/SKILL\.md$", str((x.get("input") or {}).get("file_path", ""))))):
             if skill is None: skill = te
         # Same docs/text skip as the trigger: a docs-only edit is not a code session.
         elif typ == "tool_use" and x.get("name") in ("Edit", "Write") and first_edit is None \
@@ -283,7 +284,7 @@ if [ "$label" = "baseline" ]; then
   # should never run. If it ran anyway (grep finds a real Skill invocation), flag it —
   # a contaminated baseline must be excluded from the control arm.
   contaminated="false"
-  grep -qE '"skill"[[:space:]]*:[[:space:]]*"[^"]*agentic-advisor[^"]*"' "$transcript" 2>/dev/null && contaminated="true"
+  { grep -qE '"skill"[[:space:]]*:[[:space:]]*"[^"]*agentic-advisor[^"]*"' "$transcript" 2>/dev/null || grep -qE '"file_path"[[:space:]]*:[[:space:]]*"[^"]*/skills/[^"/]*agentic-advisor[^"/]*/SKILL\.md"' "$transcript" 2>/dev/null; } && contaminated="true"
   payload="$(jq -n \
     --arg m "$METRIC_NAME" --arg src "$SOURCE" --argjson ts "$ts" \
     --arg repo "$repo" --arg email "$email" --arg repourl "$repo_url" --arg branch "$branch" \
