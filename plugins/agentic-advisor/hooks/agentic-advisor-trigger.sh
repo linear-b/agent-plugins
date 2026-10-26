@@ -52,8 +52,10 @@ skill_ran() {
 
 # Is the LATEST advisor Skill call still missing its verdict (assistant text, or the
 # hold's `printf` Bash call)? Prints "pending" or "ok"; prints nothing on parse failure.
-verdict_state() {
-  jq -rs --arg n "agentic-advisor" --arg re 'LinearB: .+ (LOW|MEDIUM|HIGH) effort' '
+VERDICT_RE='LinearB: .+ ((LOW|MEDIUM|HIGH) effort|skipped \(not a code task\))'
+GRADED_RE='LinearB: .+ (LOW|MEDIUM|HIGH) effort'
+verdict_state() { # $1 = the verdict regex required (default: a grade or a skip)
+  jq -rs --arg n "agentic-advisor" --arg re "${1:-$VERDICT_RE}" '
     [.[] | select(.message.role? == "assistant") | .message.content? // [] | .[]?] as $c
     | [$c | to_entries[] | select(.value.type? == "tool_use" and .value.name? == "Skill"
         and ((.value.input.skill? // "") | tostring | contains($n))) | .key] as $sk
@@ -94,7 +96,7 @@ set_marker() { # $1 = a directory inside the repo
 }
 
 # Imperative, silent guidance — no permission question, no announcement.
-guidance="MANDATORY FIRST STEP for this code task: before you read files, search, explore, spawn any subagent, or edit anything, you MUST invoke the \`agentic-advisor\` skill (via the Skill tool) to grade this repo's effort level. Do not start the task, do not touch code, until you have run it and printed its verdict line verbatim in this shape: > LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan> (a hook parses that line; a prose summary is not recorded). This is required, not optional — do not skip it even if the task seems obvious. Invoke it directly (no need to ask the user or announce it). It degrades gracefully: if LinearB is unavailable, default to MEDIUM effort and continue."
+guidance="MANDATORY FIRST STEP for this code task: before you read files, search, explore, spawn any subagent, or edit anything, you MUST invoke the \`agentic-advisor\` skill (via the Skill tool) to grade this repo's effort level. Do not start the task, do not touch code, until you have run it and printed its verdict line verbatim in this shape: > LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan> (a hook parses that line; a prose summary is not recorded). This is required, not optional — do not skip it even if the task seems obvious. Invoke it directly (no need to ask the user or announce it). It degrades gracefully: if LinearB is unavailable, default to MEDIUM effort and continue. If the task will not change any code, print > LinearB: <repo> — skipped (not a code task) instead of a grade."
 
 # Mark handled (this session+repo) and emit additionalContext for the event.
 emit() { # $1 = hookEventName, $2 = context text
@@ -158,7 +160,7 @@ case "$event" in
         state="$(verdict_state)"
         if [ -n "$state" ] && : > "$vdone" 2>/dev/null && [ "$state" = "pending" ]; then
           dbg "PreToolUse: reminded the agent to print the verdict line"
-          note "LinearB: your effort grade isn't recorded yet. It's only recorded from the verdict line, not from thinking, so print it now: > LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan>. If you aren't writing text, run: printf '%s\\n' '> LinearB: <repo> — <LEVEL> effort (<evidence>) — <plan>'"
+          note "LinearB: your effort grade isn't recorded yet. It's only recorded from the verdict line, not from thinking, so print it now: > LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan>. If you aren't writing text, run: printf '%s\\n' '> LinearB: <repo> — <LEVEL> effort (<evidence>) — <plan>'. If no code will change, print > LinearB: <repo> — skipped (not a code task) instead."
         fi
       fi
     fi
@@ -196,8 +198,10 @@ case "$event" in
     # (missing file path, non-git, missing transcript, or marker write failure).
     git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 
-    # Skill already ran this session -> allow the edit. If a verdict names this repo, mark it handled so later prompts here aren't nudged.
-    if skill_ran; then
+    # Skill already graded this session -> allow the edit. A "skipped (not a code task)" line alone doesn't count: editing now is code work.
+    # If a verdict names this repo, mark it handled so later prompts here aren't nudged.
+    # "pending" only when parsed and no grade yet; a parse failure prints nothing and fails open.
+    if skill_ran && [ "$(verdict_state "$GRADED_RE")" != "pending" ]; then
       set_marker "$dir"
       # The verdict uses the repo's name: check the remote's name and the folder's (clones and worktrees can differ).
       url="$(git -C "$dir" config --get remote.origin.url 2>/dev/null)"; url="${url%.git}"
