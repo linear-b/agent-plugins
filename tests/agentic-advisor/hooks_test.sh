@@ -124,11 +124,25 @@ check "trigger: LINEARB_AGENTIC_ADVISOR_ENABLED=1 keeps the hold" denied
 teardown
 
 # --- trigger: PreToolUse grade-before-edit hold ---
+names_skill_file() { jq -e '.hookSpecificOutput.permissionDecisionReason | contains("/skills/agentic-advisor/SKILL.md")' <<<"$out" >/dev/null; }
+wants_line() { jq -e '.hookSpecificOutput.permissionDecisionReason | contains("not a prose summary")' <<<"$out" >/dev/null; }
 setup
 run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
 check "trigger: first source edit is held" denied
+check "trigger: the hold names the SKILL.md to read if the skill isn't listed" names_skill_file
+run "$TRIGGER" PreToolUse "$(tool Edit lib.js)"
+check "trigger: switching files doesn't get past the hold" denied
 run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
-check "trigger: hold happens only once" silent
+check "trigger: still held without a verdict (3rd)" denied
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "trigger: after 3 holds the edit goes through (never walls)" silent
+teardown
+
+setup
+add_skill
+printf '%s\n' '{"message":{"role":"assistant","content":[{"type":"text","text":"LinearB shows the repo is calm, so I will rate this MEDIUM effort."}]}}' >> "$TRANSCRIPT"
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "trigger: a prose-only grade is held, asking for the verdict line" wants_line
 teardown
 
 setup
@@ -144,9 +158,7 @@ run "$TRIGGER" PreToolUse "$(spawn Agent general-purpose)"
 check "trigger: first subagent spawn is held" denied
 check "trigger: spawn hold asks to pass the effort on" pass_effort
 run "$TRIGGER" PreToolUse "$(spawn Agent general-purpose)"
-check "trigger: spawn hold happens only once" silent
-run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
-check "trigger: a held spawn uses up the edit hold too" silent
+check "trigger: a second spawn without a verdict is held again" denied
 teardown
 
 setup
