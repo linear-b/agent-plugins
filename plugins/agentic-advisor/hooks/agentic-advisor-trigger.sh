@@ -45,9 +45,15 @@ transcript="$(jq -r '.transcript_path // empty' <<<"$input" 2>/dev/null || true)
 # Has the agentic-advisor skill ACTUALLY run in this session? (a real Skill
 # tool_use in the transcript, not just text that quotes it). Used to hard-gate
 # the first source edit so the effort grade is computed BEFORE code is written.
+read_ran() { # the agent read the skill's SKILL.md (the fallback when the Skill tool lists no skill)
+  [ -n "$(jq -r --arg re '/skills/[^/]*agentic-advisor[^/]*/SKILL\.md$' 'select(.message.role? == "assistant") | .message.content? // [] | .[]?
+      | select(.type? == "tool_use" and .name? == "Read" and ((.input.file_path? // "") | tostring | test($re))) | "y"' \
+      "$transcript" 2>/dev/null | head -n 1)" ]
+}
 skill_ran() {
   [ -n "$transcript" ] && [ -f "$transcript" ] || return 1
-  grep -qE '"skill"[[:space:]]*:[[:space:]]*"[^"]*agentic-advisor[^"]*"' "$transcript" 2>/dev/null
+  grep -qE '"skill"[[:space:]]*:[[:space:]]*"[^"]*agentic-advisor[^"]*"' "$transcript" 2>/dev/null \
+    || read_ran
 }
 
 # Is the LATEST advisor Skill call still missing its verdict (assistant text, or the
@@ -58,7 +64,10 @@ verdict_state() { # $1 = the verdict regex required (default: a grade or a skip)
   jq -rs --arg n "agentic-advisor" --arg re "${1:-$VERDICT_RE}" '
     [.[] | select(.message.role? == "assistant") | .message.content? // [] | .[]?] as $c
     | [$c | to_entries[] | select(.value.type? == "tool_use" and .value.name? == "Skill"
-        and ((.value.input.skill? // "") | tostring | contains($n))) | .key] as $sk
+        and ((.value.input.skill? // "") | tostring | contains($n))) | .key] as $calls
+    | [$c | to_entries[] | select(.value.type? == "tool_use" and .value.name? == "Read"
+        and ((.value.input.file_path? // "") | tostring | test("/skills/[^/]*" + $n + "[^/]*/SKILL\\.md$"))) | .key] as $reads
+    | (if ($calls | length) > 0 then $calls else $reads[0:1] end) as $sk
     | if ($sk | length) == 0 then "ok"
       elif ($c[($sk[-1] + 1):] | any(
           (.type? == "text" and ((.text? // "") | test($re)))
@@ -96,7 +105,9 @@ set_marker() { # $1 = a directory inside the repo
 }
 
 # Imperative, silent guidance — no permission question, no announcement.
-guidance="MANDATORY FIRST STEP for this code task: before you read files, search, explore, spawn any subagent, or edit anything, you MUST invoke the \`agentic-advisor\` skill (via the Skill tool) to grade this repo's effort level. Do not start the task, do not touch code, until you have run it and printed its verdict line verbatim in this shape: > LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan> (a hook parses that line; a prose summary is not recorded). This is required, not optional — do not skip it even if the task seems obvious. Invoke it directly (no need to ask the user or announce it). It degrades gracefully: if LinearB is unavailable, default to MEDIUM effort and continue. If the task will not change any code, print > LinearB: <repo> — skipped (not a code task) instead of a grade."
+skill_file="$(cd "$(dirname "$0")/.." 2>/dev/null && pwd)/skills/agentic-advisor/SKILL.md"
+skill_hint=""; [ -f "$skill_file" ] && skill_hint=" If the skill is not in your skill list, read $skill_file and follow it."
+guidance="MANDATORY FIRST STEP for this code task: before you read files, search, explore, spawn any subagent, or edit anything, you MUST invoke the \`agentic-advisor\` skill (via the Skill tool) to grade this repo's effort level. Do not start the task, do not touch code, until you have run it and printed its verdict line verbatim in this shape: > LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan> (a hook parses that line; a prose summary is not recorded). This is required, not optional — do not skip it even if the task seems obvious. Invoke it directly (no need to ask the user or announce it). It degrades gracefully: if LinearB is unavailable, default to MEDIUM effort and continue. If the task will not change any code, print > LinearB: <repo> — skipped (not a code task) instead of a grade.$skill_hint"
 
 # Mark handled (this session+repo) and emit additionalContext for the event.
 emit() { # $1 = hookEventName, $2 = context text
@@ -149,22 +160,23 @@ case "$event" in
     ;;
 
   PreToolUse)
-    # Verdict reminder: once per advisor run, if the first non-shell tool comes before that run's
-    # verdict line, attach a note asking for it (the call still runs). Keyed by the run count so a
-    # second repo's run is checked too; the marker stops re-parsing once a run is settled.
-    if skill_ran; then
+    tool="$(jq -r '.tool_name // empty' <<<"$input" 2>/dev/null || true)"
+    # Verdict reminder: once per advisor run, if a read comes before that run's verdict line, attach a
+    # note asking for it (the call still runs). Edits and spawns skip it: the hold below blocks them
+    # until the line exists. Keyed by the run count so a second repo's run is checked too.
+    case "$tool" in Read|Grep|Glob) is_read=1 ;; *) is_read=0 ;; esac
+    if [ "$is_read" = 1 ] && skill_ran; then
       # Count only assistant Skill calls (same thing verdict_state indexes), not echoes elsewhere.
-      runs="$(grep '"role":"assistant"' "$transcript" 2>/dev/null | grep -cE '"skill"[[:space:]]*:[[:space:]]*"[^"]*'"agentic-advisor"'[^"]*"')"
+      runs="$(grep '"role":"assistant"' "$transcript" 2>/dev/null | grep -cE '"skill"[[:space:]]*:[[:space:]]*"[^"]*'"agentic-advisor"'[^"]*"|"name"[[:space:]]*:[[:space:]]*"Read".*/skills/[^"/]*'"agentic-advisor"'[^"/]*/SKILL\.md"')"
       vdone="$marker_dir/${session_id:-default}.${runs:-0}.vdone"
       if [ ! -f "$vdone" ]; then
         state="$(verdict_state)"
         if [ -n "$state" ] && : > "$vdone" 2>/dev/null && [ "$state" = "pending" ]; then
           dbg "PreToolUse: reminded the agent to print the verdict line"
-          note "LinearB: your effort grade isn't recorded yet. It's only recorded from the verdict line, not from thinking, so print it now: > LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan>. If you aren't writing text, run: printf '%s\\n' '> LinearB: <repo> — <LEVEL> effort (<evidence>) — <plan>'. If no code will change, print > LinearB: <repo> — skipped (not a code task) instead."
+          note "LinearB: your effort grade isn't recorded yet. It's only recorded from the verdict line, not from thinking, so print it now (a prose summary doesn't count): > LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan>. If you aren't writing text, run: printf '%s\\n' '> LinearB: <repo> — <LEVEL> effort (<evidence>) — <plan>'. If no code will change, print > LinearB: <repo> — skipped (not a code task) instead."
         fi
       fi
     fi
-    tool="$(jq -r '.tool_name // empty' <<<"$input" 2>/dev/null || true)"
     case "$tool" in
       Read|Grep|Glob) exit 0 ;;
       Task|Agent)
@@ -189,13 +201,10 @@ case "$event" in
         ;;
     esac
 
-    # ONE-TIME grade-before-work HOLD: the FIRST source edit or subagent spawn in a repo this
-    # session is denied (permissionDecision:deny) so the skill grades before code is written.
-    # Held at most ONCE per repo/session (via its own dedicated .held marker — NOT the
-    # UserPromptSubmit nudge (.done) marker, so a prior prompt-nudge can't satisfy the check
-    # and bypass the hold); after that one hold, work proceeds even if the skill still hasn't
-    # run (we don't wall). Scoped to a git repo; fails OPEN on any uncertainty
-    # (missing file path, non-git, missing transcript, or marker write failure).
+    # GRADE-before-work HOLD: a source edit or subagent spawn in a repo with no verdict line this session
+    # is denied (permissionDecision:deny) until one exists, at most 3 times per repo/session (its own .held
+    # counter, not the nudge's .done marker), so prose or a file switch can't skip the grade and a broken
+    # setup never walls. Scoped to a git repo; fails OPEN on any uncertainty.
     git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 
     # Skill already graded this session -> allow the edit. A "skipped (not a code task)" line alone doesn't count: editing now is code work.
@@ -217,16 +226,18 @@ case "$event" in
     # UserPromptSubmit nudge can't satisfy this check and bypass the hold.
     set_marker "$dir"
     held="${marker%.done}.held"
-    [ -f "$held" ] && exit 0   # already held once this repo/session -> allow
+    n="$(cat "$held" 2>/dev/null)"; case "$n" in ''|*[!0-9]*) n=0 ;; esac
+    [ "$n" -ge 3 ] && exit 0   # held 3 times this repo/session -> allow (never wall)
 
-    # First source edit or spawn here + skill hasn't run -> HOLD it once, via a structured
-    # permissionDecision:deny. Same one-time block as before, but a much cleaner UI
-    # than `exit 2`: it shows just the reason (no "PreToolUse hook error: [path]"
-    # prefix) and feeds that reason to the model. FAIL OPEN if we can't record the
-    # marker (don't wedge).
-    : > "$held" 2>/dev/null || exit 0
-    dbg "PreToolUse: held $tool until the skill runs"
-    reason="One quick first step before ${what}: run the \`agentic-advisor\` skill to grade this repo's effort (just this once per repo, this session). Print its verdict line (> LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (…) — …), then make the same call again — it'll go right through, and later calls won't pause. If LinearB isn't available it just defaults to MEDIUM."
+    # Source edit or spawn here + no verdict line yet -> HOLD it via permissionDecision:deny (shows
+    # just the reason and feeds it to the model). FAIL OPEN if we can't record the count (don't wedge).
+    printf '%s' "$((n + 1))" > "$held" 2>/dev/null || exit 0
+    dbg "PreToolUse: held $tool until a verdict line exists (hold $((n + 1)))"
+    if skill_ran; then
+      reason="Your effort grade isn't recorded yet: print the verdict line itself, not a prose summary — > LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan> (or run: printf '%s\\n' '> LinearB: …'). A skipped (not a code task) line doesn't count once you change code. Then make the same call again."
+    else
+      reason="One quick first step before ${what}: run the \`agentic-advisor\` skill to grade this repo's effort.$skill_hint Print its verdict line (> LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (…) — …), then make the same call again; this hold repeats until it's printed. If LinearB isn't available it just defaults to MEDIUM."
+    fi
     [ "$what" = "this edit" ] || reason="$reason Tell the subagent the effort level in its prompt, so the delegated work follows it."
     deny "$reason"
     ;;
