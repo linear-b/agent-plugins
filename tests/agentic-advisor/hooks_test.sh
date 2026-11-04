@@ -52,7 +52,7 @@ nudged()  { [ "$rc" -eq 0 ] && jq -e '.hookSpecificOutput.additionalContext | co
 reminded() { [ "$rc" -eq 0 ] && jq -e '(.hookSpecificOutput.permissionDecision == null) and (.hookSpecificOutput.additionalContext | contains("verdict line"))' <<<"$out" >/dev/null; }
 denied()  { [ "$rc" -eq 0 ] && jq -e '.hookSpecificOutput.permissionDecision == "deny"' <<<"$out" >/dev/null; }
 add_skill()   { printf '%s\n' '{"timestamp":"2026-01-01T00:00:00Z","message":{"role":"assistant","model":"m","usage":{"output_tokens":10},"content":[{"type":"tool_use","name":"Skill","input":{"skill":"agentic-advisor:agentic-advisor"}}]}}' >> "$TRANSCRIPT"; }
-add_verdict() { printf '%s\n' '{"timestamp":"2026-01-01T00:00:05Z","message":{"role":"assistant","model":"m","usage":{"output_tokens":20},"content":[{"type":"text","text":"> LinearB: widgets — MEDIUM effort (rework 6.5%) — focused diff."}]}}' >> "$TRANSCRIPT"; }
+add_verdict() { printf '%s\n' '{"timestamp":"2026-01-01T00:00:05Z","message":{"role":"assistant","model":"m","usage":{"output_tokens":20},"content":[{"type":"text","text":"> LinearB: widgets — Kept effort (medium; rework 6.5%) — focused diff."}]}}' >> "$TRANSCRIPT"; }
 # The loaded SKILL.md lands in the transcript as a user message, example verdict line included.
 add_skill_body() { printf '%s\n' '{"type":"user","isMeta":true,"message":{"role":"user","content":[{"type":"text","text":"Example: > LinearB: api-service — HIGH effort (rework 3.4%) — small steps."}]}}' >> "$TRANSCRIPT"; }
 # The fallback: the agent reads the skill's SKILL.md instead of calling the Skill tool.
@@ -63,11 +63,20 @@ add_verdict_for() { printf '{"message":{"role":"assistant","content":[{"type":"t
 ncalls() { find "$T/curl" -type f | wc -l | tr -d ' '; }
 await_calls() { local _; for _ in 1 2 3 4 5 6 7 8 9 10; do [ "$(ncalls)" -ge "$1" ] && return; sleep 0.2; done; }
 call_json() { cat "$T/curl"/call.* 2>/dev/null; }
+one_call()  { [ "$(ncalls)" = 1 ]; }
 no_calls()  { [ "$rc" -eq 0 ] && [ "$(ncalls)" = 0 ]; }
 one_decision() {
   [ "$rc" -eq 0 ] && [ "$(ncalls)" = 1 ] && call_json | jq -e '.value == 2 and .tags.effort_level == "MEDIUM" and .tags.phase == "decision" and .entity.repo_url == "https://github.com/acme/widgets.git"' >/dev/null
 }
 backfilled() { call_json | jq -se 'any(.[]; .tags.phase == "decision" and .tags.backfill == "session_end")' >/dev/null; }
+
+raised_decision() {
+  [ "$rc" -eq 0 ] && [ "$(ncalls)" = 1 ] && call_json | jq -e '.value == 3 and .tags.effort_level == "HIGH" and .tags.effort_change == "raised" and .tags.target_effort == "high" and .tags.evidence == "rework 9%"' >/dev/null
+}
+old_shape_decision() {
+  [ "$rc" -eq 0 ] && [ "$(ncalls)" = 1 ] && call_json | jq -e '.tags.effort_level == "LOW" and (.tags | has("effort_change") | not)' >/dev/null
+}
+add_line() { printf '{"message":{"role":"assistant","content":[{"type":"text","text":"%s"}]}}\n' "$1" >> "$TRANSCRIPT"; }
 
 # --- trigger: UserPromptSubmit ---
 setup
@@ -292,6 +301,178 @@ add_skill; add_verdict
 LINEARB_AGENTIC_ADVISOR_ENABLED=false run "$REPORT" SessionEnd
 check "report: LINEARB_AGENTIC_ADVISOR_ENABLED=false -> nothing reported" no_calls
 teardown
+
+# --- report: Reduced/Kept/Raised shape ---
+kept_max() {
+  [ "$rc" -eq 0 ] && [ "$(ncalls)" = 1 ] && call_json | jq -e '.value == 3 and .tags.effort_change == "kept" and .tags.target_effort == "max" and .tags.evidence == "rework 7.9%"' >/dev/null
+}
+setup
+add_skill; add_line "> LinearB: widgets — Kept effort (max; rework 7.9%) — small steps."
+run "$REPORT" Stop; await_calls 1
+check "report: Kept effort (max) -> HIGH, kept, target max" kept_max
+teardown
+
+setup
+add_skill; add_line "> LinearB: widgets — Raised effort (medium → high; rework 9%) — small steps."
+run "$REPORT" Stop; await_calls 1
+check "report: Raised effort (medium → high) -> HIGH, raised, target high, evidence without levels" raised_decision
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — LOW effort (healthy)."
+run "$REPORT" Stop; await_calls 1
+check "report: the old LOW effort shape still reports, with no effort_change" old_shape_decision
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Reduced effort (high → low; healthy)."
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "trigger: a Reduced effort verdict releases the hold" silent
+teardown
+
+# --- report: matrix of Reduced/Kept/Raised lines ---
+matrix_ok() { # $1 change $2 target $3 evidence $4 level $5 value
+  [ "$rc" -eq 0 ] && [ "$(ncalls)" = 1 ] && call_json | jq -e --arg c "$1" --arg t "$2" --arg e "$3" --arg l "$4" --argjson v "$5" \
+    '.value == $v and .tags.effort_level == $l and .tags.effort_change == $c and .tags.target_effort == $t and ((.tags.evidence // "") == $e) and .tags.repo == "widgets"' >/dev/null
+}
+setup
+add_skill; add_line "> LinearB: widgets — Kept effort (low; rework 1%) — go."
+run "$REPORT" Stop; await_calls 1
+check "matrix: ept effort (low; rework 1%) — go. -> kept/low/LOW" matrix_ok 'kept' 'low' 'rework 1%' 'LOW' 1
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Kept effort (medium; rework 1%) — go."
+run "$REPORT" Stop; await_calls 1
+check "matrix: ept effort (medium; rework 1%) — go. -> kept/medium/MEDIUM" matrix_ok 'kept' 'medium' 'rework 1%' 'MEDIUM' 2
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Kept effort (high; rework 1%) — go."
+run "$REPORT" Stop; await_calls 1
+check "matrix: ept effort (high; rework 1%) — go. -> kept/high/HIGH" matrix_ok 'kept' 'high' 'rework 1%' 'HIGH' 3
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Kept effort (xhigh; rework 1%) — go."
+run "$REPORT" Stop; await_calls 1
+check "matrix: ept effort (xhigh; rework 1%) — go. -> kept/xhigh/HIGH" matrix_ok 'kept' 'xhigh' 'rework 1%' 'HIGH' 3
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Kept effort (max; rework 1%) — go."
+run "$REPORT" Stop; await_calls 1
+check "matrix: ept effort (max; rework 1%) — go. -> kept/max/HIGH" matrix_ok 'kept' 'max' 'rework 1%' 'HIGH' 3
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Raised effort (low → medium; rework 9%) — careful."
+run "$REPORT" Stop; await_calls 1
+check "matrix: aised effort (low → medium; rework 9%) — careful -> raised/medium/MEDIUM" matrix_ok 'raised' 'medium' 'rework 9%' 'MEDIUM' 2
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Raised effort (low → high; rework 9%) — careful."
+run "$REPORT" Stop; await_calls 1
+check "matrix: aised effort (low → high; rework 9%) — careful. -> raised/high/HIGH" matrix_ok 'raised' 'high' 'rework 9%' 'HIGH' 3
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Reduced effort (medium → low; healthy) — lean."
+run "$REPORT" Stop; await_calls 1
+check "matrix: educed effort (medium → low; healthy) — lean. -> reduced/low/LOW" matrix_ok 'reduced' 'low' 'healthy' 'LOW' 1
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Raised effort (medium → high; rework 9%) — careful."
+run "$REPORT" Stop; await_calls 1
+check "matrix: aised effort (medium → high; rework 9%) — carefu -> raised/high/HIGH" matrix_ok 'raised' 'high' 'rework 9%' 'HIGH' 3
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Reduced effort (high → low; healthy) — lean."
+run "$REPORT" Stop; await_calls 1
+check "matrix: educed effort (high → low; healthy) — lean. -> reduced/low/LOW" matrix_ok 'reduced' 'low' 'healthy' 'LOW' 1
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Reduced effort (high → medium; healthy) — lean."
+run "$REPORT" Stop; await_calls 1
+check "matrix: educed effort (high → medium; healthy) — lean. -> reduced/medium/MEDIUM" matrix_ok 'reduced' 'medium' 'healthy' 'MEDIUM' 2
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Reduced effort (xhigh → low; healthy) — lean."
+run "$REPORT" Stop; await_calls 1
+check "matrix: educed effort (xhigh → low; healthy) — lean. -> reduced/low/LOW" matrix_ok 'reduced' 'low' 'healthy' 'LOW' 1
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Reduced effort (xhigh → medium; healthy) — lean."
+run "$REPORT" Stop; await_calls 1
+check "matrix: educed effort (xhigh → medium; healthy) — lean. -> reduced/medium/MEDIUM" matrix_ok 'reduced' 'medium' 'healthy' 'MEDIUM' 2
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Reduced effort (xhigh → high; healthy) — lean."
+run "$REPORT" Stop; await_calls 1
+check "matrix: educed effort (xhigh → high; healthy) — lean. -> reduced/high/HIGH" matrix_ok 'reduced' 'high' 'healthy' 'HIGH' 3
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Reduced effort (max → low; healthy) — lean."
+run "$REPORT" Stop; await_calls 1
+check "matrix: educed effort (max → low; healthy) — lean. -> reduced/low/LOW" matrix_ok 'reduced' 'low' 'healthy' 'LOW' 1
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Reduced effort (max → medium; healthy) — lean."
+run "$REPORT" Stop; await_calls 1
+check "matrix: educed effort (max → medium; healthy) — lean. -> reduced/medium/MEDIUM" matrix_ok 'reduced' 'medium' 'healthy' 'MEDIUM' 2
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Reduced effort (max → high; healthy) — lean."
+run "$REPORT" Stop; await_calls 1
+check "matrix: educed effort (max → high; healthy) — lean. -> reduced/high/HIGH" matrix_ok 'reduced' 'high' 'healthy' 'HIGH' 3
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Raised effort (medium -> high; rework 9%) — careful."
+run "$REPORT" Stop; await_calls 1
+check "matrix: aised effort (medium -> high; rework 9%) — caref -> raised/high/HIGH" matrix_ok 'raised' 'high' 'rework 9%' 'HIGH' 3
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Kept effort (medium) — go."
+run "$REPORT" Stop; await_calls 1
+check "matrix: ept effort (medium) — go. -> kept/medium/MEDIUM" matrix_ok 'kept' 'medium' '' 'MEDIUM' 2
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Raised effort (low → medium; ticket ABC-1: Highest bug; rework 2%)"
+run "$REPORT" Stop; await_calls 1
+check "matrix: aised effort (low → medium; ticket ABC-1: Highes -> raised/medium/MEDIUM" matrix_ok 'raised' 'medium' 'ticket ABC-1: Highest bug; rework 2%' 'MEDIUM' 2
+teardown
+setup
+add_skill; add_line "Looked at the signals.\n\n> LinearB: widgets — Reduced effort (max → low; healthy) — lean.\n\nNext I will edit."
+run "$REPORT" Stop; await_calls 1
+check "matrix: \n\n> LinearB: widgets — Reduced effort (max → l -> reduced/low/LOW" matrix_ok 'reduced' 'low' 'healthy' 'LOW' 1
+teardown
+setup
+add_skill; printf '%s\n' '{"message":{"role":"assistant","content":[{"type":"tool_use","name":"Bash","input":{"command":"printf '"'"'%s\\n'"'"' '"'"'> LinearB: widgets — Raised effort (low → high; rework 9%) — careful.'"'"'"}}]}}' >> "$TRANSCRIPT"
+run "$REPORT" Stop; await_calls 1
+check "matrix: printf-form Raised line is reported" matrix_ok raised high 'rework 9%' HIGH 3
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Raised effort (medium → high; x) — y."
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "matrix: trigger releases hold on Raised" silent
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Kept effort (max; x) — y."
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "matrix: trigger releases hold on Kept (max)" silent
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Raised the effort because rework is high."
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "matrix: prose without the shape still holds" denied
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Raised effort (medium → high; x) — y."; add_line "> LinearB: widgets — Raised effort (medium → high; x) — y."
+run "$REPORT" Stop; await_calls 1; run "$REPORT" Stop; sleep 0.5
+check "matrix: the same decision is sent once" one_call
+teardown
+for bad in "> LinearB: widgets — Raised effort (medium" "> LinearB: widgets — Kept effort (high-level summary only)" "> LinearB: widgets — Raised effort (high; no target)"; do
+  setup
+  add_skill; add_line "$bad"
+  run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+  check "matrix: incomplete verdict still holds: $bad" denied
+  run "$REPORT" Stop; sleep 0.5
+  check "matrix: incomplete verdict is not reported: $bad" no_calls
+  teardown
+done
+
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

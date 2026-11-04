@@ -58,8 +58,8 @@ skill_ran() {
 
 # Is the LATEST advisor Skill call still missing its verdict (assistant text, or the
 # hold's `printf` Bash call)? Prints "pending" or "ok"; prints nothing on parse failure.
-VERDICT_RE='LinearB: .+ ((LOW|MEDIUM|HIGH) effort|skipped \(not a code task\))'
-GRADED_RE='LinearB: .+ (LOW|MEDIUM|HIGH) effort'
+VERDICT_RE='LinearB: .+ (((Reduced|Raised) effort \((low|medium|high|xhigh|max) (→|->) (low|medium|high|xhigh|max)[;)]|Kept effort \((low|medium|high|xhigh|max)[;)]|(LOW|MEDIUM|HIGH) effort)|skipped \(not a code task\))'
+GRADED_RE='LinearB: .+ ((Reduced|Raised) effort \((low|medium|high|xhigh|max) (→|->) (low|medium|high|xhigh|max)[;)]|Kept effort \((low|medium|high|xhigh|max)[;)]|(LOW|MEDIUM|HIGH) effort)'
 verdict_state() { # $1 = the verdict regex required (default: a grade or a skip)
   jq -rs --arg n "agentic-advisor" --arg re "${1:-$VERDICT_RE}" '
     [.[] | select(.message.role? == "assistant") | .message.content? // [] | .[]?] as $c
@@ -107,7 +107,7 @@ set_marker() { # $1 = a directory inside the repo
 # Imperative, silent guidance — no permission question, no announcement.
 skill_file="$(cd "$(dirname "$0")/.." 2>/dev/null && pwd)/skills/agentic-advisor/SKILL.md"
 skill_hint=""; [ -f "$skill_file" ] && skill_hint=" If the skill is not in your skill list, read $skill_file and follow it."
-guidance="MANDATORY FIRST STEP for this code task: before you read files, search, explore, spawn any subagent, or edit anything, you MUST invoke the \`agentic-advisor\` skill (via the Skill tool) to grade this repo's effort level. Do not start the task, do not touch code, until you have run it and printed its verdict line verbatim in this shape: > LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan> (a hook parses that line; a prose summary is not recorded). This is required, not optional — do not skip it even if the task seems obvious. Invoke it directly (no need to ask the user or announce it). It degrades gracefully: if LinearB is unavailable, default to MEDIUM effort and continue. If the task will not change any code, print > LinearB: <repo> — skipped (not a code task) instead of a grade.$skill_hint"
+guidance="MANDATORY FIRST STEP for this code task: before you read files, search, explore, spawn any subagent, or edit anything, you MUST invoke the \`agentic-advisor\` skill (via the Skill tool) to grade this repo's effort level. Do not start the task, do not touch code, until you have run it and printed its verdict line verbatim in this shape: > LinearB: <repo> — <Raised|Reduced> effort (<current> → <new level>; <evidence>) — <plan>, or > LinearB: <repo> — Kept effort (<current>; <evidence>) — <plan> (a hook parses that line; a prose summary is not recorded). This is required, not optional — do not skip it even if the task seems obvious. Invoke it directly (no need to ask the user or announce it). It degrades gracefully: if LinearB is unavailable, work at medium effort and continue. If the task will not change any code, print > LinearB: <repo> — skipped (not a code task) instead of a grade.$skill_hint"
 
 # Mark handled (this session+repo) and emit additionalContext for the event.
 emit() { # $1 = hookEventName, $2 = context text
@@ -173,7 +173,7 @@ case "$event" in
         state="$(verdict_state)"
         if [ -n "$state" ] && : > "$vdone" 2>/dev/null && [ "$state" = "pending" ]; then
           dbg "PreToolUse: reminded the agent to print the verdict line"
-          note "LinearB: your effort grade isn't recorded yet. It's only recorded from the verdict line, not from thinking, so print it now (a prose summary doesn't count): > LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan>. If you aren't writing text, run: printf '%s\\n' '> LinearB: <repo> — <LEVEL> effort (<evidence>) — <plan>'. If no code will change, print > LinearB: <repo> — skipped (not a code task) instead."
+          note "LinearB: your effort grade isn't recorded yet. It's only recorded from the verdict line, not from thinking, so print it now (a prose summary doesn't count): > LinearB: <repo> — <Raised|Reduced> effort (<current> → <new level>; <evidence>) — <plan>, or > LinearB: <repo> — Kept effort (<current>; <evidence>) — <plan>. If you aren't writing text, run: printf '%s\\n' '> LinearB: <repo> — <that verdict>'. If no code will change, print > LinearB: <repo> — skipped (not a code task) instead."
         fi
       fi
     fi
@@ -234,9 +234,9 @@ case "$event" in
     printf '%s' "$((n + 1))" > "$held" 2>/dev/null || exit 0
     dbg "PreToolUse: held $tool until a verdict line exists (hold $((n + 1)))"
     if skill_ran; then
-      reason="Your effort grade isn't recorded yet: print the verdict line itself, not a prose summary — > LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <plan> (or run: printf '%s\\n' '> LinearB: …'). A skipped (not a code task) line doesn't count once you change code. Then make the same call again."
+      reason="Your effort grade isn't recorded yet: print the verdict line itself, not a prose summary — > LinearB: <repo> — <Raised|Reduced> effort (<current> → <new level>; <evidence>) — <plan>, or > LinearB: <repo> — Kept effort (<current>; <evidence>) — <plan> (or run: printf '%s\\n' '> LinearB: …'). A skipped (not a code task) line doesn't count once you change code. Then make the same call again."
     else
-      reason="One quick first step before ${what}: run the \`agentic-advisor\` skill to grade this repo's effort.$skill_hint Print its verdict line (> LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (…) — …), then make the same call again; this hold repeats until it's printed. If LinearB isn't available it just defaults to MEDIUM."
+      reason="One quick first step before ${what}: run the \`agentic-advisor\` skill to grade this repo's effort.$skill_hint Print its verdict line (> LinearB: <repo> — <Raised|Reduced> effort (<current> → <new level>; <evidence>) — <plan>, or > LinearB: <repo> — Kept effort (<current>; <evidence>) — <plan>), then make the same call again; this hold repeats until it's printed. If LinearB isn't available it just works at medium effort."
     fi
     [ "$what" = "this edit" ] || reason="$reason Tell the subagent the effort level in its prompt, so the delegated work follows it."
     deny "$reason"

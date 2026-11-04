@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0] - 2026-11-04
+
+### Changed
+
+- The verdict now compares the grade with the model's current effort (`/effort`): `Raised effort (medium → high; …)`, `Kept effort (high; …)` or `Reduced effort (max → medium; …)`. It never raises past high, and a HIGH grade on xhigh or max is Kept.
+- The decision event adds `effort_change` and `target_effort`; `effort_level` stays LOW/MEDIUM/HIGH, and the older `MEDIUM effort` lines are still reported.
+
 ## [1.4.7] - 2026-10-26
 
 ### Fixed

@@ -117,6 +117,9 @@ if ! { [ -d "$marker_dir" ] && [ -O "$marker_dir" ] && [ -w "$marker_dir" ]; }; 
 state="$marker_dir/${session_id:-default}.reported"
 touch "$state" 2>/dev/null || true
 
+# A graded verdict line: the Reduced/Kept/Raised shape, or the older LOW/MEDIUM/HIGH one.
+GRADED_RE='LinearB: .+ ((Reduced|Raised) effort \((low|medium|high|xhigh|max) (→|->) (low|medium|high|xhigh|max)[;)]|Kept effort \((low|medium|high|xhigh|max)[;)]|(LOW|MEDIUM|HIGH) effort)'
+
 # Cheap fast-exits for the graded path, BEFORE the git + jq repo-resolution work — so a
 # per-turn Stop that has nothing new to report costs only a grep or two, not a full
 # transcript parse. (The whole graded path requires the skill to have actually run.)
@@ -126,7 +129,7 @@ if [ "$label" = "graded" ]; then
     # Has the set of verdict lines changed since we last processed a Stop? SKILL.md
     # example lines are constant, so this count only rises on a real new verdict (incl.
     # a phase-2 re-emit). Unchanged -> nothing to do -> skip the O(n) scrape + resolution.
-    vcount="$(grep -cE 'LinearB: .+ (LOW|MEDIUM|HIGH) effort' "$transcript" 2>/dev/null)"; vcount="${vcount:-0}"
+    vcount="$(grep -cE "$GRADED_RE" "$transcript" 2>/dev/null)"; vcount="${vcount:-0}"
     vseen="$marker_dir/${session_id:-default}.vseen"
     [ -f "$vseen" ] && [ "$(cat "$vseen" 2>/dev/null)" = "$vcount" ] && { dbg "Stop: skip: no new verdict since last report"; exit 0; }
   fi
@@ -253,7 +256,7 @@ for line in open(sys.argv[1]):
         # verdict must be ASSISTANT-authored text AFTER the Skill call — not the
         # SKILL.md examples that load on invocation (they also match the pattern).
         elif role == "assistant" and skill is not None and verdict is None \
-             and re.search(r"LinearB: .+ (LOW|MEDIUM|HIGH) effort", (x.get("text") or "") if typ == "text" else
+             and re.search(r"LinearB: .+ ((Reduced|Raised) effort \((low|medium|high|xhigh|max) (→|->) (low|medium|high|xhigh|max)[;)]|Kept effort \((low|medium|high|xhigh|max)[;)]|(LOW|MEDIUM|HIGH) effort)", (x.get("text") or "") if typ == "text" else
                            str((x.get("input") or {}).get("command", "")) if typ == "tool_use" and x.get("name") == "Bash"
                            and re.search(r"(^|\n|;|&&)\s*printf\s[^\n]*LinearB: ", str((x.get("input") or {}).get("command", ""))) else ""):
             verdict = te
@@ -329,19 +332,34 @@ fi
 # GATE 2 — a real assistant-authored verdict line exists, as text or as the hold's
 # `printf` Bash call (grep, not python, so it still works without python3).
 verdicts="$(jq -r 'select(.message.role? == "assistant") | .message.content? // [] | .[]? | if .type? == "text" then .text? // empty elif .type? == "tool_use" and .name? == "Bash" and ((.input.command? // "") | test("(^|\\n|;|&&)\\s*printf\\s[^\\n]*LinearB: ")) then .input.command else empty end' "$transcript" 2>/dev/null \
-  | grep -E 'LinearB: .+ (LOW|MEDIUM|HIGH) effort' || true)"
+  | grep -E "$GRADED_RE" || true)"
 [ -n "$verdicts" ] || { dbg "$event: skip: skill ran but no verdict line yet"; exit 0; }
 
 re='LinearB: (.+) (LOW|MEDIUM|HIGH) effort'
+# Current shape: the change against the model's effort, e.g. "Raised effort (medium → high; …)" or "Kept effort (high; …)".
+re_change='LinearB: (.+) (Reduced|Raised) effort \((low|medium|high|xhigh|max) (→|->) (low|medium|high|xhigh|max)[;)]'
+re_kept='LinearB: (.+) Kept effort \((low|medium|high|xhigh|max)[;)]'
 er='\(([^\)]*)\)'
 
-# Parse a verdict line into repo/effort/evidence globals.
+# Parse a verdict line into repo/effort/change/target/evidence globals; effort stays LOW/MEDIUM/HIGH.
 parse_verdict() { # $1 = line
-  vrepo=""; veffort=""; vev=""
-  [[ "$1" =~ $re ]] || return 1
-  vrepo="${BASH_REMATCH[1]}"; veffort="${BASH_REMATCH[2]}"
+  vrepo=""; veffort=""; vchange=""; vtarget=""; vev=""
+  if [[ "$1" =~ $re_change ]]; then
+    vrepo="${BASH_REMATCH[1]}"; vtarget="${BASH_REMATCH[5]}"
+    if [ "${BASH_REMATCH[2]}" = Reduced ]; then vchange=reduced; else vchange=raised; fi
+  elif [[ "$1" =~ $re_kept ]]; then
+    vrepo="${BASH_REMATCH[1]}"; vtarget="${BASH_REMATCH[2]}"; vchange=kept
+  fi
+  if [ -n "$vchange" ]; then
+    case "$vtarget" in low) veffort=LOW ;; medium) veffort=MEDIUM ;; *) veffort=HIGH ;; esac
+  elif [[ "$1" =~ $re ]]; then
+    vrepo="${BASH_REMATCH[1]}"; veffort="${BASH_REMATCH[2]}"
+  else
+    return 1
+  fi
   vrepo="${vrepo%% —}"; vrepo="${vrepo%%—}"; vrepo="${vrepo%"${vrepo##*[![:space:]]}"}"
   [[ "$1" =~ $er ]] && vev="${BASH_REMATCH[1]}"
+  if [ -n "$vchange" ]; then case "$vev" in *\;*) vev="${vev#*; }" ;; *) vev="" ;; esac; fi
   return 0
 }
 effort_val() { case "$1" in LOW) echo 1 ;; MEDIUM) echo 2 ;; HIGH) echo 3 ;; *) echo 0 ;; esac; }
@@ -363,6 +381,7 @@ report_decisions() {
       --arg effort "$veffort" --arg repo "$vrepo" --arg ev "$vev" \
       --arg email "$email" --arg repourl "$repo_url" --arg branch "$branch" \
       --arg actual "$effort_actual" --arg ticket "$ticket" --arg sname "$session_name" \
+      --arg change "$vchange" --arg target "$vtarget" \
       --arg gdur "$grading_duration" --arg model "$model" --arg gtok "$grading_tokens" --arg pver "$plugin_version" --arg idsrc "$identity_source" \
       --arg backfill "$backfill" '
       {
@@ -376,6 +395,7 @@ report_decisions() {
           (if $ev     != "" then {evidence: $ev}                else {} end) +
           (if $branch != "" then {branch: $branch}              else {} end) +
           (if $actual != "" then {actual_effort: $actual}       else {} end) +
+          (if $change != "" then {effort_change: $change, target_effort: $target} else {} end) +
           (if $ticket != "" then {ticket: $ticket}              else {} end) +
           (if $sname  != "" then {session_name: $sname}         else {} end) +
           (if $gdur   != "" then {grading_duration_s: $gdur}    else {} end) +
@@ -397,7 +417,7 @@ report_decisions
 # event == SessionEnd, graded: TOKENS event — the whole-session coding_tokens, attributed
 # to the final (last) verdict. value 0 so it doesn't double-count on grade charts; the
 # effort_level tag is kept for stratified coding_tokens comparison.
-last_verdict="$(printf '%s\n' "$verdicts" | grep -E 'LinearB: .+ (LOW|MEDIUM|HIGH) effort' | tail -1)"
+last_verdict="$(printf '%s\n' "$verdicts" | grep -E "$GRADED_RE" | tail -1)"
 [ -n "$last_verdict" ] || exit 0
 parse_verdict "$last_verdict" || exit 0
 key="$(printf 'tokens|%s|%s' "$vrepo" "$veffort" | sha1)"

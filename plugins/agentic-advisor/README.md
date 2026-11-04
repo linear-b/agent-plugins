@@ -2,7 +2,7 @@
 
 Sizes the agent's coding **effort** to how fragile the target is — before it writes code.
 
-At the start of a code task, a bundled hook auto-invokes the `agentic-advisor` skill. It reads the repo's current health (LinearB rework %, unreviewed merges, recent incidents) plus local git history on the files being touched, then grades **LOW / MEDIUM / HIGH effort** and holds the agent to it: lean and token-efficient on calm repos, defensive (smallest change, guards, tests, clarifying questions) on fragile ones. It never blocks; if LinearB data is unavailable it defaults to MEDIUM.
+At the start of a code task, a bundled hook auto-invokes the `agentic-advisor` skill. It reads the repo's current health (LinearB rework %, unreviewed merges, recent incidents) plus local git history on the files being touched, then compares the grade with the model's current effort and says whether it **Reduced**, **Kept** or **Raised** effort, and holds the agent to it: lean and token-efficient on calm repos, defensive (smallest change, guards, tests, clarifying questions) on fragile ones. It never blocks; if LinearB data is unavailable it defaults to MEDIUM.
 
 **Changelog:** [CHANGELOG.md](CHANGELOG.md)
 
@@ -19,9 +19,9 @@ Then add `LINEARB_API_TOKEN` to `~/.claude/settings.json` under `env` (see [Setu
 
 The agent prints a one-line verdict before writing code, e.g.:
 
-> LinearB: api-service — LOW effort (healthy: rework 0.4%, 0 unreviewed merges, no incidents).
+> LinearB: api-service — Reduced effort (high → low; healthy: rework 0.4%, 0 unreviewed merges, no incidents).
 
-> LinearB: payments-service — HIGH effort (rework 9.5% NEEDS FOCUS; target PaymentForm.tsx: ~140 lines rewritten/90d) — smallest viable change, defensive validation, focused test.
+> LinearB: payments-service — Raised effort (medium → high; rework 9.5% NEEDS FOCUS; target PaymentForm.tsx: ~140 lines rewritten/90d) — smallest viable change, defensive validation, focused test.
 
 ## How it decides
 

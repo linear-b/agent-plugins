@@ -11,21 +11,22 @@ Run this at the start of a code task to load the repo's current health signals, 
 
 ## Off switch (check first)
 
-Unless the user asked for this skill by name, your first Bash call starts with `printf 'enabled=%s\n' "${LINEARB_AGENTIC_ADVISOR_ENABLED:-}"`. If it prints `0`, `false`, `off` or `no` (any case), the user turned this skill off: stop here, print no verdict, and carry on with the task normally.
+Your first Bash call starts with `printf 'enabled=%s effort=%s\n' "${LINEARB_AGENTIC_ADVISOR_ENABLED:-}" "${CLAUDE_EFFORT:-}"`. `effort` is the model's current effort level, used by the verdict (see Effort Change). Unless the user asked for this skill by name, if `enabled` prints `0`, `false`, `off` or `no` (any case), the user turned this skill off: stop here, print no verdict, and carry on with the task normally.
 
 ## Output contract (read this first)
 
 Right after the repo sweep, your first assistant text **must be this verdict line, verbatim in shape**, as a markdown blockquote:
 
-> LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <what you will do differently>
+> LinearB: <repo> — <Raised|Reduced> effort (<current> → <new level>; <evidence>) — <what you will do differently>
+> LinearB: <repo> — Kept effort (<current>; <evidence>) — <what you will do differently>
 
-- **A hook parses this exact line** to record the decision. Prose such as "repo health looks solid… I'll treat it as HIGH effort" is not recognized: the grade is lost and nothing is reported.
-- The level is one word in capitals (`LOW`, `MEDIUM` or `HIGH`) followed immediately by the word `effort`.
+- **A hook parses this exact line** to record the decision. Prose such as "repo health looks solid… I'll work harder" is not recognized: the decision is lost and nothing is reported.
+- `Raised effort` or `Reduced effort`, then in the parentheses the model's current level, `→`, and the level to work at; `Kept effort` shows only the current level. Levels are lowercase (`low`, `medium`, `high`, `xhigh`, `max`); see Effort Change.
 - Explanation may follow on later lines, but the verdict line comes first and is never reworded.
 - **No code will change?** Print `> LinearB: <repo> — skipped (not a code task)` instead of a grade and stop (see the cheap exits). Nothing is reported.
-- If you aren't writing visible text at this point, record it with one Bash call instead: `printf '%s\n' '> LinearB: <repo> — <LEVEL> effort (<evidence>) — <plan>'`. If neither exists, a hook reminds you on your next file read or edit.
+- If you aren't writing visible text at this point, record it with one Bash call instead: `printf '%s\n' '> LinearB: <repo> — <Raised|Reduced> effort (<current> → <new level>; <evidence>) — <plan>'` (or `Kept effort (<current>; <evidence>)`). If neither exists, a hook reminds you on your next file read or edit.
 
-Example: `> LinearB: api-service — HIGH effort (rework 3.4%, calm repo — but auth refactor with wide blast radius) — small behavior-preserving steps, tests green, confirm scope first.`
+Example: `> LinearB: api-service — Raised effort (medium → high; rework 3.4%, calm repo — but auth refactor with wide blast radius) — small behavior-preserving steps, tests green, confirm scope first.`
 
 ## Access (read first)
 
@@ -58,7 +59,7 @@ Two checks that prevent wasted work — do them before any LinearB call:
   f="${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor/verdicts/$h.json"   # private per-user dir, not shared /tmp
   cat "$f" 2>/dev/null   # read BEFORE any LinearB call
   ```
-  - **On a hit** (file exists, **is owned by you** — check `[ -O "$f" ]` and ignore it otherwise, since a cache file someone else wrote could fake a LOW grade — AND `computed_at` is within the last 24h — or the file's mtime is <24h old): **skip the repo-health LinearB calls** (repo list, measurements, incidents/search) and reuse `repo_effort`/`repo_evidence` **as the repo-health axis only**. You MUST still grade **task-complexity and change-area (files) fresh for the current task**, then combine — the cache replaces the phase-1 *data*, NOT the final verdict. Note it — **keep the standard `… <EFFORT> effort (…)` shape** (with the literal word `effort`) so the reporter still captures the decision: `LinearB: <repo> — <EFFORT> effort (repo-health cached <N>h ago; task + files fresh)`. (The ticket lookup under Task Complexity is per task, not repo health, so it still runs on a hit.)
+  - **On a hit** (file exists, **is owned by you** — check `[ -O "$f" ]` and ignore it otherwise, since a cache file someone else wrote could fake a LOW grade — AND `computed_at` is within the last 24h — or the file's mtime is <24h old): **skip the repo-health LinearB calls** (repo list, measurements, incidents/search) and reuse `repo_effort`/`repo_evidence` **as the repo-health axis only**. You MUST still grade **task-complexity and change-area (files) fresh for the current task**, then combine — the cache replaces the phase-1 *data*, NOT the final verdict. Note it — **keep the standard verdict shape** so the reporter still captures the decision: `LinearB: <repo> — <Raised|Reduced|Kept> effort (<levels>; repo-health cached <N>h ago; task + files fresh)`. (The ticket lookup under Task Complexity is per task, not repo health, so it still runs on a hit.)
   - **On a miss/stale:** compute the repo-health verdict fresh, then **write the cache atomically** (a per-process temp file then `mv` — atomic on the same filesystem, and the `$$` suffix means two concurrent sessions never share a temp file):
     ```text
     (umask 077; mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor/verdicts")
@@ -144,6 +145,16 @@ The rework bands match **LinearB's own benchmark** (ELITE <3% and STRONG 3-6% �
 
 LOW effort is the reward for *confirmed* health — it requires positive evidence the repo is calm. When signals are missing or a tool errors, do **not** assume healthy: fall back to **MEDIUM** and continue (never block the task).
 
+### Effort Change (what the verdict says)
+
+LOW / MEDIUM / HIGH is your internal grade; the verdict states it as a change against the model's current effort (`effort=` from your first Bash call). The grade's level is `low`, `medium` or `high`. Rank the model's levels low < medium < high < xhigh < max; an empty `effort` counts as `medium`.
+
+- Grade's level above the current → `Raised effort (<current> → <grade's level>; …)`.
+- Grade's level below the current → `Reduced effort (<current> → <grade's level>; …)`.
+- Same → `Kept effort (<current>; …)`. A HIGH grade on `xhigh` or `max` is also `Kept effort (<current>; …)`: the advisor never raises past `high`, and never reduces fragile work.
+
+Then work at the grade's level as described below.
+
 ## Task Complexity (a third effort axis)
 
 Repo health + file history tell you how **fragile the ground** is — not how **hard the task** is. A calm repo (LOW health signals) can still host a demanding change, and that change deserves care *regardless* of how healthy the repo is. Grading purely from repo signals **under-invests on big tasks in calm repos** — the agent goes light and the human ends up fixing the output.
@@ -168,14 +179,14 @@ key="$(printf '%s' "$key" | tr '[:lower:]' '[:upper:]')"   # lookups are case-se
 ```
 
 - **Raise, never lower.** Priority `Highest`/`Critical`/`Blocker`, or type `bug`/`incident`/`hotfix`, means the task is at least **MEDIUM**; a `Highest`/`Critical` bug or incident means **HIGH**. A large estimate (`points` >= 8) raises the task axis one notch. A `Low` priority or small estimate never lowers the grade below what the prompt and repo already show.
-- **Name it in the verdict** when it drove the grade, e.g. `… HIGH effort (repo calm — rework 1.2% — but ticket ABC-123 per LinearB: Highest-priority bug)`.
+- **Name it in the verdict** when it drove the grade, e.g. `… Raised effort (medium → high; repo calm — rework 1.2% — but ticket ABC-123 per LinearB: Highest-priority bug)`.
 - **Freshness:** ticket data comes from LinearB's Jira sync and can lag Jira slightly. Treat it as a hint; that's also why it only ever raises the grade.
 - **Labels:** a `security`, `incident`, `hotfix`, `migration` or `breaking` label means the task is at least **MEDIUM**; any other label is context only.
 - **HTTP 401/403 → the token rule in Access applies** (grade MEDIUM, tell the user to refresh `LINEARB_API_TOKEN`), even on a cache hit, where this may be the only call. **Empty output, any other failure, or no key → ignore it** and grade the task from the prompt as usual. Never block, and don't retry.
 
 Same LOW/MEDIUM/HIGH scale: **LOW** = small, localized, well-specified, little logic; **MEDIUM** = a normal feature/fix (several files, real logic, a few edge cases); **HIGH** = large, cross-cutting, multi-repo, tricky, ambiguous, or high blast-radius.
 
-**Combine all axes: `effort = max(repo-health, change-area, task-complexity)`** — any one being high raises the bar, and **name which axis drove it** (e.g. `MEDIUM effort (repo calm — rework 1%, no incidents — but the task spans 3 components with shared state)`). This keeps the token win — a *routine* change to a calm repo still grades LOW — while stopping the under-investment on demanding tasks in calm repos.
+**Combine all axes: `effort = max(repo-health, change-area, task-complexity)`** — any one being high raises the bar, and **name which axis drove it** (e.g. `Kept effort (medium; repo calm — rework 1%, no incidents — but the task spans 3 components with shared state)`). This keeps the token win — a *routine* change to a calm repo still grades LOW — while stopping the under-investment on demanding tasks in calm repos.
 
 **Re-assess as the task unfolds:** if it turns out to touch more repos/files or more logic than first expected, **bump the effort mid-task and say so** — effort tracks the real task, not the first impression.
 
@@ -245,13 +256,13 @@ Phase 2 was only ever deferred because it needs the target file paths. So:
 
 - **If the target file(s) are already known at task start** — named in the prompt, or unambiguous from cwd — run the phase-2 probe **together with the repo sweep** and fold both into **one combined verdict line** (no separate follow-up):
   ```text
-  > LinearB: <repo> — <EFFORT> effort (rework X% <tier>; target <file>: ~N lines rewritten/90d) — <what you'll do>.
+  > LinearB: <repo> — <Raised|Reduced|Kept> effort (<levels>; rework X% <tier>; target <file>: ~N lines rewritten/90d) — <what you'll do>.
   ```
   This is the reliable path: it's part of the same up-front measurement, not a "remember later" step.
 - **Only if the file cannot be known without exploring** (vague prompt) — emit the repo verdict first, explore to find the files, then before your first `Edit`/`Write` report phase 2. **Which line you print depends on whether phase 2 changes the effort** (recall `effort = max(repo-health, change-area, task)`, so a fix/revert hotspot can raise it above the repo level):
   - **If phase 2 CHANGES the combined effort** — re-emit the **full verdict line** with the new level, so it stands as the corrected decision (this is the line that gets recorded; without it, telemetry keeps the stale phase-1 level):
     ```text
-    > LinearB: <repo> — <NEW EFFORT> effort (repo rework X% — but target <file>: ~N lines rewritten/90d) — <what you'll do>.
+    > LinearB: <repo> — <Raised|Reduced|Kept> effort (<levels>; repo rework X% — but target <file>: ~N lines rewritten/90d) — <what you'll do>.
     ```
   - **If phase 2 does NOT change the level** — it's pure targeting context; print the short follow-up:
     ```text
@@ -264,7 +275,7 @@ Phase 2 was only ever deferred because it needs the target file paths. So:
 
 The effort level governs **code changes only**: it never lowers the care, accuracy or thoroughness of reading, analysis, answers or writing.
 
-Use the effort level to guide the implementation silently. The aim is to **spend effort proportional to repo health** — go light (saving tokens and time) on calm repos, dig in on fragile ones. Don't waste effort.
+Work to the definition of the level you landed on; Raised / Kept / Reduced only says how it compares with the model's setting. `Kept effort (xhigh)` or `(max)` follows HIGH. Use the effort level to guide the implementation silently. The aim is to **spend effort proportional to repo health** — go light (saving tokens and time) on calm repos, dig in on fragile ones. Don't waste effort.
 
 LOW effort — repo confirmed healthy, go light and token-efficient (an active repo can still be LOW — busy ≠ risky):
 
@@ -294,24 +305,26 @@ HIGH effort — repo looks fragile, be careful:
 The moment the **repo sweep** (including the ticket lookup, if any) returns — and **before any other tool call, and before spawning any Explore/subagent, reading, searching, `ls`/`find`, or editing code** — your next output MUST be this exact verdict line, **formatted as a markdown blockquote** (start it with `> ` so the terminal renders it with the left bar / emphasis and it stands out). Emit it as assistant text — do NOT wrap it in an `echo`/shell command or code fence (that hides it in a collapsed tool block). The one exception is the exact `printf '%s\n' '> LinearB: …'` Bash call from the Output contract, when you aren't writing visible text or the hook asks for it. Do not paraphrase it into prose like "LOW effort signals confirmed". This is the **repo-level verdict**; it is fully knowable from the sweep alone, so nothing else may happen first. Format:
 
 ```text
-> LinearB: <repo> — <LOW|MEDIUM|HIGH> effort (<evidence>) — <what you will do differently>
+> LinearB: <repo> — <Raised|Reduced> effort (<current> → <new level>; <evidence>) — <what you will do differently>
+> LinearB: <repo> — Kept effort (<current>; <evidence>) — <what you will do differently>
 ```
 
 Rules:
-- The line begins with `> ` (blockquote), then literally `LinearB: `, the real repo name, the CAPS effort level, and the word `effort`.
+- The line begins with `> ` (blockquote), then literally `LinearB: `, the real repo name, then `Raised effort`, `Reduced effort` or `Kept effort` and the levels in the parentheses (see Effort Change).
 - `<evidence>` = the actual figures (rework %, unreviewed merges, incident note), not a summary.
-- The `— <what you will do differently>` clause is required for MEDIUM/HIGH, optional for LOW.
+- The `— <what you will do differently>` clause is required for MEDIUM/HIGH grades, optional for LOW.
 - Emit it once, as the first line, before any exploration.
-- **Fold phase 2 into this line when the target file is already known** (named in the prompt or obvious from cwd): run its probe alongside the sweep and include the file finding in this same verdict, e.g. `… HIGH effort (rework 9.5% NEEDS FOCUS; target PaymentForm.tsx: ~140 lines rewritten/90d over 6 commits) — …`. See "Prefer running phase 2 with phase 1" above. Only when the file can't be known without exploring do you emit this repo-level line first and add the phase-2 line after exploration (before the first edit). Never delay this repo-level verdict to wait on exploration.
+- **Fold phase 2 into this line when the target file is already known** (named in the prompt or obvious from cwd): run its probe alongside the sweep and include the file finding in this same verdict, e.g. `… Raised effort (medium → high; rework 9.5% NEEDS FOCUS; target PaymentForm.tsx: ~140 lines rewritten/90d over 6 commits) — …`. See "Prefer running phase 2 with phase 1" above. Only when the file can't be known without exploring do you emit this repo-level line first and add the phase-2 line after exploration (before the first edit). Never delay this repo-level verdict to wait on exploration.
 
 Concrete examples (fill in the real repo name and actual figures):
 
 ```text
-> LinearB: api-service — LOW effort (healthy: rework 0.4%, no incidents, 0 unreviewed merges).
-> LinearB: payments-service — MEDIUM effort (rework 2.2%, prod OOM incident ~3wk ago, resolved) — keeping the change focused with edge-case tests.
-> LinearB: data-pipeline — HIGH effort (rework 7.9%, NEEDS FOCUS tier) — smallest viable change, defensive guards + failure-mode tests.
-> LinearB: <repo> — MEDIUM effort (signals unavailable) — defaulting to regular coding.
-> LinearB: <repo> — MEDIUM effort (LINEARB_API_TOKEN not set — LinearB signals and usage reporting are off) — defaulting to regular coding.
+> LinearB: api-service — Reduced effort (high → low; healthy: rework 0.4%, no incidents, 0 unreviewed merges).
+> LinearB: payments-service — Kept effort (medium; rework 2.2%, prod OOM incident ~3wk ago, resolved) — keeping the change focused with edge-case tests.
+> LinearB: data-pipeline — Raised effort (medium → high; rework 7.9%, NEEDS FOCUS tier) — smallest viable change, defensive guards + failure-mode tests.
+> LinearB: data-pipeline — Kept effort (max; rework 7.9%, NEEDS FOCUS tier) — smallest viable change, defensive guards + failure-mode tests.
+> LinearB: <repo> — Kept effort (medium; signals unavailable) — defaulting to regular coding.
+> LinearB: <repo> — Reduced effort (high → medium; LINEARB_API_TOKEN not set — LinearB signals and usage reporting are off) — defaulting to regular coding.
 ```
 
 Keep this skill lightweight. Do not print a full report unless the user asks for one.
