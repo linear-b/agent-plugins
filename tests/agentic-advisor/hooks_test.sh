@@ -463,6 +463,16 @@ add_skill; add_line "> LinearB: widgets — Raised effort (medium → high; x) �
 run "$REPORT" Stop; await_calls 1; run "$REPORT" Stop; sleep 0.5
 check "matrix: the same decision is sent once" one_call
 teardown
+for bad in "> LinearB: widgets — Raised effort (medium" "> LinearB: widgets — Kept effort (high-level summary only)" "> LinearB: widgets — Raised effort (high; no target)"; do
+  setup
+  add_skill; add_line "$bad"
+  run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+  check "matrix: incomplete verdict still holds: $bad" denied
+  run "$REPORT" Stop; sleep 0.5
+  check "matrix: incomplete verdict is not reported: $bad" no_calls
+  teardown
+done
+
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

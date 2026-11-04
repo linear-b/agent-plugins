@@ -58,8 +58,8 @@ skill_ran() {
 
 # Is the LATEST advisor Skill call still missing its verdict (assistant text, or the
 # hold's `printf` Bash call)? Prints "pending" or "ok"; prints nothing on parse failure.
-VERDICT_RE='LinearB: .+ (((Reduced|Kept|Raised) effort \((low|medium|high|xhigh|max)|(LOW|MEDIUM|HIGH) effort)|skipped \(not a code task\))'
-GRADED_RE='LinearB: .+ ((Reduced|Kept|Raised) effort \((low|medium|high|xhigh|max)|(LOW|MEDIUM|HIGH) effort)'
+VERDICT_RE='LinearB: .+ (((Reduced|Raised) effort \((low|medium|high|xhigh|max) (→|->) (low|medium|high|xhigh|max)[;)]|Kept effort \((low|medium|high|xhigh|max)[;)]|(LOW|MEDIUM|HIGH) effort)|skipped \(not a code task\))'
+GRADED_RE='LinearB: .+ ((Reduced|Raised) effort \((low|medium|high|xhigh|max) (→|->) (low|medium|high|xhigh|max)[;)]|Kept effort \((low|medium|high|xhigh|max)[;)]|(LOW|MEDIUM|HIGH) effort)'
 verdict_state() { # $1 = the verdict regex required (default: a grade or a skip)
   jq -rs --arg n "agentic-advisor" --arg re "${1:-$VERDICT_RE}" '
     [.[] | select(.message.role? == "assistant") | .message.content? // [] | .[]?] as $c

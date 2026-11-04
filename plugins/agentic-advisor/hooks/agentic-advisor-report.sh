@@ -118,7 +118,7 @@ state="$marker_dir/${session_id:-default}.reported"
 touch "$state" 2>/dev/null || true
 
 # A graded verdict line: the Reduced/Kept/Raised shape, or the older LOW/MEDIUM/HIGH one.
-GRADED_RE='LinearB: .+ ((Reduced|Kept|Raised) effort \((low|medium|high|xhigh|max)|(LOW|MEDIUM|HIGH) effort)'
+GRADED_RE='LinearB: .+ ((Reduced|Raised) effort \((low|medium|high|xhigh|max) (→|->) (low|medium|high|xhigh|max)[;)]|Kept effort \((low|medium|high|xhigh|max)[;)]|(LOW|MEDIUM|HIGH) effort)'
 
 # Cheap fast-exits for the graded path, BEFORE the git + jq repo-resolution work — so a
 # per-turn Stop that has nothing new to report costs only a grep or two, not a full
@@ -256,7 +256,7 @@ for line in open(sys.argv[1]):
         # verdict must be ASSISTANT-authored text AFTER the Skill call — not the
         # SKILL.md examples that load on invocation (they also match the pattern).
         elif role == "assistant" and skill is not None and verdict is None \
-             and re.search(r"LinearB: .+ ((Reduced|Kept|Raised) effort \((low|medium|high|xhigh|max)|(LOW|MEDIUM|HIGH) effort)", (x.get("text") or "") if typ == "text" else
+             and re.search(r"LinearB: .+ ((Reduced|Raised) effort \((low|medium|high|xhigh|max) (→|->) (low|medium|high|xhigh|max)[;)]|Kept effort \((low|medium|high|xhigh|max)[;)]|(LOW|MEDIUM|HIGH) effort)", (x.get("text") or "") if typ == "text" else
                            str((x.get("input") or {}).get("command", "")) if typ == "tool_use" and x.get("name") == "Bash"
                            and re.search(r"(^|\n|;|&&)\s*printf\s[^\n]*LinearB: ", str((x.get("input") or {}).get("command", ""))) else ""):
             verdict = te
@@ -337,15 +337,20 @@ verdicts="$(jq -r 'select(.message.role? == "assistant") | .message.content? // 
 
 re='LinearB: (.+) (LOW|MEDIUM|HIGH) effort'
 # Current shape: the change against the model's effort, e.g. "Raised effort (medium → high; …)" or "Kept effort (high; …)".
-re_change='LinearB: (.+) (Reduced|Kept|Raised) effort \((low|medium|high|xhigh|max)( (→|->) (low|medium|high|xhigh|max))?'
+re_change='LinearB: (.+) (Reduced|Raised) effort \((low|medium|high|xhigh|max) (→|->) (low|medium|high|xhigh|max)[;)]'
+re_kept='LinearB: (.+) Kept effort \((low|medium|high|xhigh|max)[;)]'
 er='\(([^\)]*)\)'
 
 # Parse a verdict line into repo/effort/change/target/evidence globals; effort stays LOW/MEDIUM/HIGH.
 parse_verdict() { # $1 = line
   vrepo=""; veffort=""; vchange=""; vtarget=""; vev=""
   if [[ "$1" =~ $re_change ]]; then
-    vrepo="${BASH_REMATCH[1]}"; vtarget="${BASH_REMATCH[6]:-${BASH_REMATCH[3]}}"
-    case "${BASH_REMATCH[2]}" in Reduced) vchange=reduced ;; Kept) vchange=kept ;; *) vchange=raised ;; esac
+    vrepo="${BASH_REMATCH[1]}"; vtarget="${BASH_REMATCH[5]}"
+    if [ "${BASH_REMATCH[2]}" = Reduced ]; then vchange=reduced; else vchange=raised; fi
+  elif [[ "$1" =~ $re_kept ]]; then
+    vrepo="${BASH_REMATCH[1]}"; vtarget="${BASH_REMATCH[2]}"; vchange=kept
+  fi
+  if [ -n "$vchange" ]; then
     case "$vtarget" in low) veffort=LOW ;; medium) veffort=MEDIUM ;; *) veffort=HIGH ;; esac
   elif [[ "$1" =~ $re ]]; then
     vrepo="${BASH_REMATCH[1]}"; veffort="${BASH_REMATCH[2]}"
