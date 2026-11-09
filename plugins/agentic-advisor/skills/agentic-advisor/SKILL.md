@@ -38,7 +38,7 @@ AUTH=(-H @- -H "Content-Type: application/json")
 set -o pipefail   # with curl -f, a failed request fails the whole pipeline instead of looking like "no rows"
 ```
 
-**A failed call is not an empty result.** With `-f`, any HTTP 4xx/5xx or timeout makes `curl` exit non-zero (e.g. `curl: (22) The requested URL returned error: 401`). Treat that signal as **unavailable** — a failed repositories call is not "repo not found", a failed measurements call is not "dormant" — and **never grade LOW from missing data.** **HTTP 401/403 means the token is invalid or expired:** stop calling, grade **MEDIUM (signals unavailable)**, and tell the user to refresh `LINEARB_API_TOKEN`.
+**A failed call is not an empty result.** With `-f`, any HTTP 4xx/5xx or timeout makes `curl` exit non-zero (e.g. `curl: (22) The requested URL returned error: 401`). Treat that signal as **unavailable** — a failed repositories call is not "repo not found", a failed measurements call is not "dormant" — and **never grade LOW from missing data.** **HTTP 401/403 means the token is invalid or expired:** stop calling, grade **MEDIUM (signals unavailable)**, and tell the user to refresh `LINEARB_API_TOKEN`. The one exception: a 403 on a call reshaped from what this skill shows (e.g. two ids in `repository_ids`) is the token's scope refusing that shape, not an expired token — send it as shown instead.
 
 **Token gate:** if `LINEARB_API_TOKEN` is empty, do **not** call — grade **MEDIUM** with the evidence `LINEARB_API_TOKEN not set`, print the verdict, then tell the user in one plain sentence that LinearB signals and usage reporting stay off until they add `LINEARB_API_TOKEN` to `~/.claude/settings.json` under `env` and restart Claude Code (see the plugin README). Then continue. Never block the task. The same token authenticates both these reads and the optional reporter hook. On any timeout or non-2xx, treat that one signal as unavailable rather than failing the task.
 
@@ -117,6 +117,7 @@ curl -fsS -m 25 "${AUTH[@]}" <<<"x-api-key: ${LINEARB_API_TOKEN}" -X POST "$LB/a
 ```
 
 - **Scope the request with the top-level `repository_ids: [<repo_id>]` — this is REQUIRED, not optional.** Without it the API returns only a **capped page (~25 repos)**; any repo outside that page comes back with **no matching row**, which the skill would misread as "signals unavailable → MEDIUM" and **silently under-grade a genuinely HIGH repo**. (The *nested* `filters.repository_ids` is the field that's ignored — use the **top-level** `repository_ids`. Keep the client-side `select(.repository_id == $id)` as a guard.) **If the call succeeded (no curl error) and the filtered result is empty, the repo genuinely has no activity in the window** (dormant) — treat rework as absent and lean LOW on the repo axis; do **not** go hunting through pagination/`limit`, `repository_ids` is authoritative.
+- **One repo per call.** `repository_ids` holds exactly one id; when the task spans several repos, make one call per repo. The API token refuses more than one id with a 403.
 - `commit.activity.rework.rate` **is the rework percentage already** (server-side `rework.count / total_changes * 100`) — use it directly, do not divide again; if `null`, skip the rework signal.
 - `pr.merged.without.review.count > 0` = unreviewed-merge risk signal.
 - An **unknown metric name returns `0`, not an error** (a metric that's `0` across every repo means the name is wrong).
@@ -336,6 +337,6 @@ Keep this skill lightweight. Do not print a full report unless the user asks for
 - `POST /api/v1/incidents/search` can be slow → **retry once** before marking incidents unknown.
 - Only pass `repository_urls` with the exact `.git` URL — a mismatch can error rather than return empty.
 - If measurements fails or returns nulls → skip the rework/quality signals and lean on incidents — a failed call is *unavailable*, so it can never support LOW.
-- **HTTP 401/403 = invalid or expired token** → stop calling, grade MEDIUM (signals unavailable), and tell the user to refresh `LINEARB_API_TOKEN`.
+- **HTTP 401/403 = invalid or expired token** → stop calling, grade MEDIUM (signals unavailable), and tell the user to refresh `LINEARB_API_TOKEN`. A 403 on a reshaped call (e.g. several `repository_ids`) is a scope refusal: resend it as this skill shows.
 - A metric that is `0` across **every** repo in the response usually means a wrong metric name, not a healthy org — recheck the name.
 - Never block, throw, or refuse the code task because LinearB signals are unavailable.
