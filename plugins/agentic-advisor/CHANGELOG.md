@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.1] - 2026-11-09
+
+### Fixed
+
+- Repo health is fetched with one measurements call per repo. A task spanning two repos had batched both ids into one call, which the API token refuses with a 403, and that 403 is no longer read as an expired token.
+
 ## [1.5.0] - 2026-11-04
 
 ### Changed
