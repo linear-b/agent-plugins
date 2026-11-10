@@ -17,6 +17,10 @@
 #     BACKSTOP - a code edit or subagent spawn is starting and this repo wasn't graded yet this
 #                session. Catches tasks that slipped past the prompt gate.
 #
+#   PostToolUse (matcher Bash)
+#     SHOW     - a `printf` verdict line ran: echo it as a systemMessage so the user sees it
+#                even when the Bash call is collapsed.
+#
 # This NEVER does LinearB work itself and NEVER blocks. It only injects an
 # additionalContext nudge and always exits 0 (exit 2 on UserPromptSubmit would
 # erase the user's prompt).
@@ -133,6 +137,15 @@ if [ -n "$session_id" ] && [ "${BASELINE_PCT:-0}" -gt 0 ] 2>/dev/null; then
 fi
 
 case "$event" in
+  PostToolUse)
+    cmd="$(jq -r '.tool_input.command // empty' <<<"$input" 2>/dev/null || true)"
+    case "$cmd" in *printf*"LinearB: "*) ;; *) exit 0 ;; esac
+    line="$(printf '%s\n' "$cmd" | grep -oE "> ${GRADED_RE}[^']*" | head -n 1)"
+    [ -n "$line" ] || exit 0
+    jq -cn --arg m "$line" '{systemMessage: $m}'
+    dbg "PostToolUse: showed the verdict line to the user"
+    ;;
+
   UserPromptSubmit)
     prompt="$(jq -r '.prompt // .user_input // empty' <<<"$input" 2>/dev/null || true)"
     [ -z "$prompt" ] && exit 0
@@ -234,7 +247,7 @@ case "$event" in
     printf '%s' "$((n + 1))" > "$held" 2>/dev/null || exit 0
     dbg "PreToolUse: held $tool until a verdict line exists (hold $((n + 1)))"
     if skill_ran; then
-      reason="Your effort grade isn't recorded yet: print the verdict line itself, not a prose summary — > LinearB: <repo> — <Raised|Reduced> effort (<current> → <new level>; <evidence>) — <plan>, or > LinearB: <repo> — Kept effort (<current>; <evidence>) — <plan> (or run: printf '%s\\n' '> LinearB: …'). A skipped (not a code task) line doesn't count once you change code. Then make the same call again."
+      reason="Your effort grade isn't recorded yet (thinking and prose summaries don't count). Run this Bash call now with your grade filled in, then make the same call again: printf '%s\\n' '> LinearB: <repo> — <Raised|Reduced> effort (<current> → <new level>; <evidence>) — <plan>' (or '> LinearB: <repo> — Kept effort (<current>; <evidence>) — <plan>')."
     else
       reason="One quick first step before ${what}: run the \`agentic-advisor\` skill to grade this repo's effort.$skill_hint Print its verdict line (> LinearB: <repo> — <Raised|Reduced> effort (<current> → <new level>; <evidence>) — <plan>, or > LinearB: <repo> — Kept effort (<current>; <evidence>) — <plan>), then make the same call again; this hold repeats until it's printed. If LinearB isn't available it just works at medium effort."
     fi

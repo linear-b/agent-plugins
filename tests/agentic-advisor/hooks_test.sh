@@ -136,7 +136,7 @@ teardown
 
 # --- trigger: PreToolUse grade-before-edit hold ---
 names_skill_file() { jq -e '.hookSpecificOutput.permissionDecisionReason | contains("/skills/agentic-advisor/SKILL.md")' <<<"$out" >/dev/null; }
-wants_line() { jq -e '.hookSpecificOutput.permissionDecisionReason | contains("not a prose summary")' <<<"$out" >/dev/null; }
+wants_line() { jq -e '.hookSpecificOutput.permissionDecisionReason | (contains("prose summaries") and contains("printf"))' <<<"$out" >/dev/null; }
 setup
 run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
 check "trigger: first source edit is held" denied
@@ -472,6 +472,45 @@ for bad in "> LinearB: widgets — Raised effort (medium" "> LinearB: widgets �
   check "matrix: incomplete verdict is not reported: $bad" no_calls
   teardown
 done
+
+# PostToolUse: a printf verdict line is shown to the user as a systemMessage.
+bash_cmd() { jq -cn --arg c "$1" '{tool_name:"Bash",tool_input:{command:$c}}' | sed 's/^{/,/; s/}$//'; }
+shown() { [ "$rc" -eq 0 ] && [ "$(jq -r '.systemMessage // empty' <<<"$out")" = "$1" ]; }
+asks_printf() { jq -e '.hookSpecificOutput.permissionDecisionReason | contains("printf")' <<<"$out" >/dev/null; }
+raised_to_high() { call_json | jq -se 'any(.[]; .tags.effort_change == "raised" and .tags.target_effort == "high")' >/dev/null; }
+add_printf() { jq -cn --arg c "printf '%s\\n' '$1'" '{message:{role:"assistant",content:[{type:"tool_use",name:"Bash",input:{command:$c}}]}}' >> "$TRANSCRIPT"; }
+V1='> LinearB: widgets — Raised effort (low → high; rework 11.0% NEEDS FOCUS) — smallest change, tests per field.'
+V2='> LinearB: widgets — Kept effort (high; rework 2.3%) — focused fix.'
+V3='> LinearB: widgets — Reduced effort (max -> medium; rework 2.3%) — focused fix.'
+for v in "$V1" "$V2" "$V3"; do
+  setup
+  run "$TRIGGER" PostToolUse "$(bash_cmd "printf '%s\\n' '$v'")"
+  check "show: printf verdict is shown: ${v:12:40}" shown "$v"
+  teardown
+done
+setup
+run "$TRIGGER" PostToolUse "$(bash_cmd "ls -la && git status")"
+check "show: an unrelated Bash call shows nothing" silent
+run "$TRIGGER" PostToolUse "$(bash_cmd "printf '%s\\n' '> LinearB: <repo> — <Raised|Reduced> effort (<current> → <new level>; <evidence>) — <plan>'")"
+check "show: the template line itself shows nothing" silent
+run "$TRIGGER" PostToolUse "$(bash_cmd "printf '%s\\n' '> LinearB: widgets — Raised effort (medium'")"
+check "show: an incomplete verdict shows nothing" silent
+LINEARB_AGENTIC_ADVISOR_ENABLED=off run "$TRIGGER" PostToolUse "$(bash_cmd "printf '%s\\n' '$V1'")"
+check "show: off switch shows nothing" silent
+teardown
+
+# Hold asks for the printf call; a printf verdict then unblocks the edit and is reported once.
+setup
+add_skill
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "hold: reason asks for the printf call" asks_printf
+add_printf "$V1"
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "hold: a printf verdict unblocks the edit" silent
+run "$REPORT" Stop; await_calls 1
+check "report: the printf verdict is reported once" one_call
+check "report: it is a raised decision to high" raised_to_high
+teardown
 
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
