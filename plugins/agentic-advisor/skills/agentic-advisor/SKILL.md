@@ -15,16 +15,23 @@ Your first Bash call starts with `printf 'enabled=%s effort=%s\n' "${LINEARB_AGE
 
 ## Output contract (read this first)
 
-Right after the repo sweep, your first assistant text **must be this verdict line, verbatim in shape**, as a markdown blockquote:
+Right after the repo sweep, your next step **must be one Bash call that prints this verdict line, verbatim in shape**:
+
+```bash
+printf '%s\n' '> LinearB: <repo> — <Raised|Reduced> effort (<current> → <new level>; <evidence>) — <plan>'
+```
+
+The two shapes:
 
 > LinearB: <repo> — <Raised|Reduced> effort (<current> → <new level>; <evidence>) — <what you will do differently>
 > LinearB: <repo> — Kept effort (<current>; <evidence>) — <what you will do differently>
 
 - **A hook parses this exact line** to record the decision. Prose such as "repo health looks solid… I'll work harder" is not recognized: the decision is lost and nothing is reported.
 - `Raised effort` or `Reduced effort`, then in the parentheses the model's current level, `→`, and the level to work at; `Kept effort` shows only the current level. Levels are lowercase (`low`, `medium`, `high`, `xhigh`, `max`); see Effort Change.
-- Explanation may follow on later lines, but the verdict line comes first and is never reworded.
+- Always use the `printf` Bash call, at every effort level: a hook records it and shows it to the user. Text alone can end up only in thinking, where nothing sees it.
+- Explanation may follow, but the verdict comes first and is never reworded.
 - **No code will change?** Print `> LinearB: <repo> — skipped (not a code task)` instead of a grade and stop (see the cheap exits). Nothing is reported.
-- If you aren't writing visible text at this point, record it with one Bash call instead: `printf '%s\n' '> LinearB: <repo> — <Raised|Reduced> effort (<current> → <new level>; <evidence>) — <plan>'` (or `Kept effort (<current>; <evidence>)`). If neither exists, a hook reminds you on your next file read or edit.
+- If it's missing, a hook blocks your first edit until the `printf` call runs.
 
 Example: `> LinearB: api-service — Raised effort (medium → high; rework 3.4%, calm repo — but auth refactor with wide blast radius) — small behavior-preserving steps, tests green, confirm scope first.`
 
@@ -303,7 +310,7 @@ HIGH effort — repo looks fragile, be careful:
 
 ## Human-Facing Note
 
-The moment the **repo sweep** (including the ticket lookup, if any) returns — and **before any other tool call, and before spawning any Explore/subagent, reading, searching, `ls`/`find`, or editing code** — your next output MUST be this exact verdict line, **formatted as a markdown blockquote** (start it with `> ` so the terminal renders it with the left bar / emphasis and it stands out). Emit it as assistant text — do NOT wrap it in an `echo`/shell command or code fence (that hides it in a collapsed tool block). The one exception is the exact `printf '%s\n' '> LinearB: …'` Bash call from the Output contract, when you aren't writing visible text or the hook asks for it. Do not paraphrase it into prose like "LOW effort signals confirmed". This is the **repo-level verdict**; it is fully knowable from the sweep alone, so nothing else may happen first. Format:
+The moment the **repo sweep** (including the ticket lookup, if any) returns — and **before any other tool call, and before spawning any Explore/subagent, reading, searching, `ls`/`find`, or editing code** — your next step MUST be the `printf '%s\n' '> LinearB: …'` Bash call from the Output contract, printing this exact verdict line (starting with `> `). Use `printf`, not `echo`, and nothing else in that call; a hook shows the line to the user. Do not paraphrase it into prose like "LOW effort signals confirmed". This is the **repo-level verdict**; it is fully knowable from the sweep alone, so nothing else may happen first. Format:
 
 ```text
 > LinearB: <repo> — <Raised|Reduced> effort (<current> → <new level>; <evidence>) — <what you will do differently>

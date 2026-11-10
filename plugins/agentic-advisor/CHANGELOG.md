@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.2] - 2026-11-10
+
+### Fixed
+
+- The verdict now shows up at every effort level. The skill records it with one `printf` call, and a new PostToolUse hook shows that line to the user. At low effort the model used to keep the verdict in its thinking, so nothing was shown or reported until the hold blocked an edit.
+
 ## [1.5.1] - 2026-11-09
 
 ### Fixed
