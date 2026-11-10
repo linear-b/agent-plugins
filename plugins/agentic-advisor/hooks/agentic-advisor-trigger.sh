@@ -140,7 +140,7 @@ case "$event" in
   PostToolUse)
     cmd="$(jq -r '.tool_input.command // empty' <<<"$input" 2>/dev/null || true)"
     case "$cmd" in *printf*"LinearB: "*) ;; *) exit 0 ;; esac
-    line="$(printf '%s\n' "$cmd" | grep -oE "> $GRADED_RE[^']*" | head -n 1)"
+    line="$(printf '%s\n' "$cmd" | grep -oE "> ${GRADED_RE}[^']*" | head -n 1)"
     [ -n "$line" ] || exit 0
     jq -cn --arg m "$line" '{systemMessage: $m}'
     dbg "PostToolUse: showed the verdict line to the user"

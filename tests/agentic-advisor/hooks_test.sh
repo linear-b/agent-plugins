@@ -476,6 +476,8 @@ done
 # PostToolUse: a printf verdict line is shown to the user as a systemMessage.
 bash_cmd() { jq -cn --arg c "$1" '{tool_name:"Bash",tool_input:{command:$c}}' | sed 's/^{/,/; s/}$//'; }
 shown() { [ "$rc" -eq 0 ] && [ "$(jq -r '.systemMessage // empty' <<<"$out")" = "$1" ]; }
+asks_printf() { jq -e '.hookSpecificOutput.permissionDecisionReason | contains("printf")' <<<"$out" >/dev/null; }
+raised_to_high() { call_json | jq -se 'any(.[]; .tags.effort_change == "raised" and .tags.target_effort == "high")' >/dev/null; }
 add_printf() { jq -cn --arg c "printf '%s\\n' '$1'" '{message:{role:"assistant",content:[{type:"tool_use",name:"Bash",input:{command:$c}}]}}' >> "$TRANSCRIPT"; }
 V1='> LinearB: widgets — Raised effort (low → high; rework 11.0% NEEDS FOCUS) — smallest change, tests per field.'
 V2='> LinearB: widgets — Kept effort (high; rework 2.3%) — focused fix.'
@@ -501,13 +503,13 @@ teardown
 setup
 add_skill
 run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
-check "hold: reason asks for the printf call" bash -c 'jq -e ".hookSpecificOutput.permissionDecisionReason | contains(\"printf\")" >/dev/null <<<"$1"' _ "$out"
+check "hold: reason asks for the printf call" asks_printf
 add_printf "$V1"
 run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
 check "hold: a printf verdict unblocks the edit" silent
 run "$REPORT" Stop; await_calls 1
 check "report: the printf verdict is reported once" one_call
-check "report: it is a raised decision to high" bash -c 'call_json() { cat "$1"/curl/call.* 2>/dev/null; }; call_json "$1" | jq -se "any(.[]; .tags.effort_change == \"raised\" and .tags.target_effort == \"high\")" >/dev/null' _ "$T"
+check "report: it is a raised decision to high" raised_to_high
 teardown
 
 
