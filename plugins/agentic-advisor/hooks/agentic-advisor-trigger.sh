@@ -18,7 +18,7 @@
 #                session. Catches tasks that slipped past the prompt gate.
 #
 #   PostToolUse (matcher Bash)
-#     SHOW     - a `printf` verdict line ran: echo it as a systemMessage so the user sees it
+#     SHOW     - a `printf` verdict (or stage 2) line ran: echo it as a systemMessage so the user sees it
 #                even when the Bash call is collapsed.
 #
 # This NEVER does LinearB work itself and NEVER blocks. It only injects an
@@ -80,6 +80,40 @@ verdict_state() { # $1 = the verdict regex required (default: a grade or a skip)
       then "ok" else "pending" end' "$transcript" 2>/dev/null
 }
 
+# One pass over the assistant's lines (text, and `printf` Bash calls) for the latest verdict naming this repo
+# ($1 = its names, one per line; none = any repo). Prints pending|skipped|graded, or stage2 when that verdict
+# is medium+ with no target file, followed by the "LinearB phase 2 —" lines printed after it. Nothing on parse failure.
+repo_state() {
+  jq -rs --arg any "$VERDICT_RE" --arg re "$GRADED_RE" --arg names "${1:-}" '
+    [.[] | select(.message.role? == "assistant") | .message.content? // [] | .[]?
+      | if .type? == "text" then (.text? // "") | split("\n")[]
+        elif (.type? == "tool_use" and .name? == "Bash") then (.input.command? // "") | split("\n")[]
+          | select(test("(^|;|&&)\\s*printf\\s")) else empty end] as $t
+    | [$names | split("\n")[] | select(length > 0)] as $ns
+    | [$t | to_entries[] | select((.value | test($any)) and (.value as $l | ($ns | length) == 0 or any($ns[];
+        . as $n | $l | contains("LinearB: " + $n + " ") or (test("LinearB: [^ ]+/") and contains("/" + $n + " ")))))] as $v
+    | if ($v | length) == 0 then "pending"
+      else $v[-1] as $l
+        | if ($l.value | test($re) | not) then "skipped"
+          elif ($l.value | test("target ")) or ($l.value | test("(→|->) low[;)]|Kept effort \\(low[;)]")) then "graded"
+          else "stage2", ($t[($l.key + 1):][] | select(test("LinearB phase 2 — ")))
+          end
+      end' "$transcript" 2>/dev/null
+}
+
+# Does a phase-2 line ($1) name the edited file, this repo, or a file in it? Uses $file_path, $names and $root.
+p2_here() {
+  local toks t n
+  t="${1#*LinearB phase 2 — }"
+  read -ra toks <<<"$(printf '%s' "${t%%: *}" | tr ',+&`' '    ')"
+  for t in ${toks[@]+"${toks[@]}"}; do
+    [ "$t" = "$(basename "$file_path")" ] || [ -e "$root/$t" ] && return 0
+    while IFS= read -r n; do [ -n "$n" ] && case "$t" in "$n"|"$n"/*) return 0 ;; esac; done <<<"$names"
+    [ -n "$(git -C "$root" ls-files -- ":(glob)**/$t" 2>/dev/null | head -n 1)" ] && return 0
+  done
+  return 1
+}
+
 note() { # $1 = context for the model; the tool call still runs (no red error in the UI)
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":%s}}\n' "$(printf '%s' "$1" | jq -Rs .)"
   exit 0
@@ -139,8 +173,10 @@ fi
 case "$event" in
   PostToolUse)
     cmd="$(jq -r '.tool_input.command // empty' <<<"$input" 2>/dev/null || true)"
-    case "$cmd" in *printf*"LinearB: "*) ;; *) exit 0 ;; esac
-    line="$(printf '%s\n' "$cmd" | grep -oE "> ${GRADED_RE}[^']*" | head -n 1)"
+    case "$cmd" in *printf*"LinearB"*) ;; *) exit 0 ;; esac
+    # Read the printed line, not the shell source, so quoting (e.g. an apostrophe) can't cut it short.
+    out="$(jq -r '.tool_response.stdout // empty' <<<"$input" 2>/dev/null || true)"
+    line="$(printf '%s\n' "$out" | grep -m 1 -E "^> (${GRADED_RE}|LinearB phase 2 — .+)" || true)"
     [ -n "$line" ] || exit 0
     jq -cn --arg m "$line" '{systemMessage: $m}'
     dbg "PostToolUse: showed the verdict line to the user"
@@ -220,16 +256,32 @@ case "$event" in
     # setup never walls. Scoped to a git repo; fails OPEN on any uncertainty.
     git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 
-    # Skill already graded this session -> allow the edit. A "skipped (not a code task)" line alone doesn't count: editing now is code work.
-    # If a verdict names this repo, mark it handled so later prompts here aren't nudged.
+    # Graded only by a verdict or "skipped (not a code task)" line naming THIS repo (the remote's or the folder's
+    # name: clones and worktrees can differ), so one repo's run can't hold or release another.
     # "pending" only when parsed and no grade yet; a parse failure prints nothing and fails open.
-    if skill_ran && [ "$(verdict_state "$GRADED_RE")" != "pending" ]; then
+    root="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)"
+    url="$(git -C "$dir" config --get remote.origin.url 2>/dev/null)"; url="${url%.git}"
+    names="$(printf '%s\n' "${url##*[/:]}" "${root:+$(basename "$root")}" | grep -v '^$')"
+    gate="pending"
+    if skill_ran; then
+      rs="$(repo_state "$names")"; gate="${rs%%$'\n'*}"
+      # No name to match: the latest skill run must also be graded, as before.
+      [ -n "$names" ] || [ "$(verdict_state "$GRADED_RE")" != "pending" ] || gate="pending"
+    fi
+    if [ "$gate" != "pending" ]; then
       set_marker "$dir"
-      # The verdict uses the repo's name: check the remote's name and the folder's (clones and worktrees can differ).
-      url="$(git -C "$dir" config --get remote.origin.url 2>/dev/null)"; url="${url%.git}"
-      for name in "${url##*[/:]}" "$(basename "$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)")"; do
-        [ -n "$name" ] && grep -qF "LinearB: $name " "$transcript" 2>/dev/null && { : > "$marker" 2>/dev/null || true; break; }
-      done
+      # A grade naming this repo marks it handled so later prompts here aren't nudged.
+      case "$gate" in graded|stage2) [ -n "$names" ] && { : > "$marker" 2>/dev/null || true; } ;; esac
+      # Stage 2 counts only a phase-2 line printed after this repo's verdict that names its file(s).
+      if [ "$gate" = "stage2" ] && [ "$what" = "this edit" ]; then
+        while IFS= read -r p2; do [ -n "$p2" ] && p2_here "$p2" && { gate="graded"; break; }; done <<<"$(printf '%s\n' "$rs" | tail -n +2)"
+      fi
+      # Stage 2: on a medium+ grade, edits wait for the file-level line, held at most twice per repo/session (never a wall).
+      s2="${marker%.done}.s2"; k="$(cat "$s2" 2>/dev/null)"; case "$k" in ''|*[!0-9]*) k=0 ;; esac
+      if [ "$what" = "this edit" ] && [ "$k" -lt 2 ] && [ "$gate" = "stage2" ] && printf '%s' "$((k + 1))" > "$s2" 2>/dev/null; then
+        dbg "PreToolUse: held $tool for the stage 2 (change-area) line"
+        deny "Stage 2 first: before editing $(basename "$file_path"), run the change-area probe on the file(s) you'll change and print the result with one Bash call: printf '%s\\n' '> LinearB phase 2 — <file>: ~N lines rewritten/90d over M commits — <concentrate guards + tests here | clean, standard care>'. If it changes the effort, print the full verdict line again instead. Then make the same call again."
+      fi
       exit 0
     fi
     # Can't read the transcript -> can't confirm skill status -> fail open (allow).
