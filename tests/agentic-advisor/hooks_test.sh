@@ -76,6 +76,7 @@ raised_decision() {
 old_shape_decision() {
   [ "$rc" -eq 0 ] && [ "$(ncalls)" = 1 ] && call_json | jq -e '.tags.effort_level == "LOW" and (.tags | has("effort_change") | not)' >/dev/null
 }
+add_stage2() { jq -cn --arg c "printf '%s\\n' '> LinearB phase 2 — app.js: ~40 lines rewritten/90d over 3 commits — clean, standard care.'" '{message:{role:"assistant",content:[{type:"tool_use",name:"Bash",input:{command:$c}}]}}' >> "$TRANSCRIPT"; }
 add_line() { printf '{"message":{"role":"assistant","content":[{"type":"text","text":"%s"}]}}\n' "$1" >> "$TRANSCRIPT"; }
 
 # --- trigger: UserPromptSubmit ---
@@ -158,6 +159,7 @@ teardown
 
 setup
 add_skill_read; add_skill_body; add_verdict
+add_stage2
 run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
 check "trigger: grading via the SKILL.md fallback (no Skill call) releases the edit" silent
 teardown
@@ -184,6 +186,7 @@ teardown
 
 setup
 add_skill; add_verdict; add_skill_read
+add_stage2
 run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
 check "trigger: re-reading SKILL.md after the verdict keeps the repo graded" silent
 teardown
@@ -238,14 +241,12 @@ teardown
 setup
 add_skill; add_skill_body; add_skipped
 run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
-check "trigger: an edit after a skipped (not a code task) run is held until a real grade" denied
-add_verdict
-run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
-check "trigger: ...and goes through once the grade is printed" silent
+check "trigger: a skipped (not a code task) line for this repo releases its edits (no stage 2)" silent
 teardown
 
 setup
 add_skill; add_verdict
+add_stage2
 run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
 check "trigger: verdict printed -> edit allowed" silent
 teardown
@@ -445,11 +446,13 @@ check "matrix: printf-form Raised line is reported" matrix_ok raised high 'rewor
 teardown
 setup
 add_skill; add_line "> LinearB: widgets — Raised effort (medium → high; x) — y."
+add_stage2
 run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
 check "matrix: trigger releases hold on Raised" silent
 teardown
 setup
 add_skill; add_line "> LinearB: widgets — Kept effort (max; x) — y."
+add_stage2
 run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
 check "matrix: trigger releases hold on Kept (max)" silent
 teardown
@@ -474,7 +477,7 @@ for bad in "> LinearB: widgets — Raised effort (medium" "> LinearB: widgets �
 done
 
 # PostToolUse: a printf verdict line is shown to the user as a systemMessage.
-bash_cmd() { jq -cn --arg c "$1" '{tool_name:"Bash",tool_input:{command:$c}}' | sed 's/^{/,/; s/}$//'; }
+bash_cmd() { jq -cn --arg c "$1" --arg o "${2:-}" '{tool_name:"Bash",tool_input:{command:$c},tool_response:{stdout:$o}}' | sed 's/^{/,/; s/}$//'; }
 shown() { [ "$rc" -eq 0 ] && [ "$(jq -r '.systemMessage // empty' <<<"$out")" = "$1" ]; }
 asks_printf() { jq -e '.hookSpecificOutput.permissionDecisionReason | contains("printf")' <<<"$out" >/dev/null; }
 raised_to_high() { call_json | jq -se 'any(.[]; .tags.effort_change == "raised" and .tags.target_effort == "high")' >/dev/null; }
@@ -484,19 +487,25 @@ V2='> LinearB: widgets — Kept effort (high; rework 2.3%) — focused fix.'
 V3='> LinearB: widgets — Reduced effort (max -> medium; rework 2.3%) — focused fix.'
 for v in "$V1" "$V2" "$V3"; do
   setup
-  run "$TRIGGER" PostToolUse "$(bash_cmd "printf '%s\\n' '$v'")"
+  run "$TRIGGER" PostToolUse "$(bash_cmd "printf '%s\\n' '$v'" "$v")"
   check "show: printf verdict is shown: ${v:12:40}" shown "$v"
   teardown
 done
 setup
-run "$TRIGGER" PostToolUse "$(bash_cmd "ls -la && git status")"
+run "$TRIGGER" PostToolUse "$(bash_cmd "ls -la && git status" "total 0")"
 check "show: an unrelated Bash call shows nothing" silent
-run "$TRIGGER" PostToolUse "$(bash_cmd "printf '%s\\n' '> LinearB: <repo> — <Raised|Reduced> effort (<current> → <new level>; <evidence>) — <plan>'")"
+TPL='> LinearB: <repo> — <Raised|Reduced> effort (<current> → <new level>; <evidence>) — <plan>'
+run "$TRIGGER" PostToolUse "$(bash_cmd "printf '%s\\n' '$TPL'" "$TPL")"
 check "show: the template line itself shows nothing" silent
-run "$TRIGGER" PostToolUse "$(bash_cmd "printf '%s\\n' '> LinearB: widgets — Raised effort (medium'")"
+run "$TRIGGER" PostToolUse "$(bash_cmd "printf '%s\\n' '> LinearB: widgets — Raised effort (medium'" "> LinearB: widgets — Raised effort (medium")"
 check "show: an incomplete verdict shows nothing" silent
-LINEARB_AGENTIC_ADVISOR_ENABLED=off run "$TRIGGER" PostToolUse "$(bash_cmd "printf '%s\\n' '$V1'")"
+LINEARB_AGENTIC_ADVISOR_ENABLED=off run "$TRIGGER" PostToolUse "$(bash_cmd "printf '%s\\n' '$V1'" "$V1")"
 check "show: off switch shows nothing" silent
+V4="> LinearB: widgets — Raised effort (low → high; rework 11.0%) — preserve the user's behavior, tests per field."
+run "$TRIGGER" PostToolUse "$(bash_cmd "printf '%s\\n' '${V4//\'/\'\\\'\'}'" "$V4")"
+check "show: an apostrophe in the plan is shown whole" shown "$V4"
+run "$TRIGGER" PostToolUse "$(bash_cmd "printf '%s\\n' '$V1'" "")"
+check "show: no printed output shows nothing" silent
 teardown
 
 # Hold asks for the printf call; a printf verdict then unblocks the edit and is reported once.
@@ -505,11 +514,109 @@ add_skill
 run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
 check "hold: reason asks for the printf call" asks_printf
 add_printf "$V1"
+add_stage2
 run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
 check "hold: a printf verdict unblocks the edit" silent
 run "$REPORT" Stop; await_calls 1
 check "report: the printf verdict is reported once" one_call
 check "report: it is a raised decision to high" raised_to_high
+teardown
+
+# Stage 2: on a medium+ grade with no target file named, the first edit waits once for the file-level line.
+stage2_held() { denied && jq -e '.hookSpecificOutput.permissionDecisionReason | (contains("Stage 2 first") and contains("app.js"))' <<<"$out" >/dev/null; }
+setup
+add_skill; add_line "> LinearB: widgets — Kept effort (medium; rework 6.5%) — focused diff."
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "stage2: medium grade, no file named -> first edit held for stage 2" stage2_held
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "stage2: a retried edit is held again" stage2_held
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "stage2: after two holds the edit goes through (never a wall)" silent
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Kept effort (medium; rework 6.5%) — focused diff."; add_stage2
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "stage2: a printed stage 2 line releases the edit" silent
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Raised effort (low → high; rework 11.0%; target app.js: ~201 lines rewritten/90d) — y."
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "stage2: a verdict that already names the target file is not held" silent
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Reduced effort (max → low; rework 0.4%) — lean."
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "stage2: a low grade is not held for stage 2" silent
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — LOW effort (healthy)."
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "stage2: the old LOW effort shape is not held for stage 2" silent
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Kept effort (medium; rework 6.5%) — inspect target files first."
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "stage2: the word target in the plan is not a file finding" stage2_held
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Kept effort (medium; rework 6.5%) — focused diff."
+run "$TRIGGER" PreToolUse "$(tool Edit README.md)"
+check "stage2: a docs edit is not held for stage 2" silent
+teardown
+setup
+P2L='> LinearB phase 2 — app.js: ~201 lines rewritten/90d over 30 commits — concentrate guards + tests here.'
+run "$TRIGGER" PostToolUse "$(bash_cmd "printf '%s\\n' '$P2L'" "$P2L")"
+check "stage2: a printed stage 2 line is shown" shown "$P2L"
+teardown
+
+# --- multi-repo: a verdict, skip or phase-2 line counts only for the repo it names ---
+setup_b() { # a second repo, gadgets, in the same session
+  REPO_B="$T/gadgets"; git init -q "$REPO_B"; git -C "$REPO_B" remote add origin git@github.com:acme/gadgets.git
+}
+edit_b() { printf ',"tool_name":"Edit","tool_input":{"file_path":"%s"}' "$REPO_B/$1"; }
+stage2_any() { denied && jq -e '.hookSpecificOutput.permissionDecisionReason | contains("Stage 2 first")' <<<"$out" >/dev/null; }
+setup; setup_b
+add_skill; add_line "> LinearB: widgets — Kept effort (low; rework 1%) — go."
+run "$TRIGGER" PreToolUse "$(edit_b b.js)"
+check "multi-repo: a verdict for widgets doesn't release an edit in gadgets" denied
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "multi-repo: ...but releases widgets" silent
+teardown
+setup; setup_b
+add_skill; add_line "> LinearB: acme/widgets — Kept effort (low; rework 1%) — go."
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "multi-repo: an owner/name verdict releases its repo" silent
+run "$TRIGGER" PreToolUse "$(edit_b b.js)"
+check "multi-repo: ...but not another repo" denied
+teardown
+setup; setup_b
+add_skill; add_line "> LinearB: gadgets — Kept effort (low; rework 1%) — go."; add_skill
+run "$TRIGGER" PreToolUse "$(edit_b b.js)"
+check "multi-repo: an unfinished re-run (for widgets) doesn't hold graded gadgets" silent
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "multi-repo: ...while ungraded widgets is still held" denied
+teardown
+setup; setup_b
+mkdir -p "$REPO/src"; : > "$REPO/src/core.js"; git -C "$REPO" add src/core.js
+add_skill; add_line "> LinearB: widgets — Kept effort (medium; rework 6%) — y."; add_line "> LinearB: gadgets — Kept effort (medium; rework 6%) — y."
+add_printf "> LinearB phase 2 — core.js: ~40 lines rewritten/90d over 3 commits — clean, standard care."
+run "$TRIGGER" PreToolUse "$(edit_b b.js)"
+check "multi-repo: a phase-2 line naming a widgets file doesn't satisfy gadgets" stage2_any
+run "$TRIGGER" PreToolUse "$(tool Edit src/other.js)"
+check "multi-repo: ...but satisfies widgets (file found in the repo)" silent
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Kept effort (medium; rework 6%) — y."; add_stage2
+add_skill; add_line "> LinearB: widgets — Kept effort (medium; rework 6%) — y."
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "stage2: a phase-2 line before this repo's latest verdict doesn't count" stage2_held
+teardown
+setup; setup_b
+add_skill; add_skipped
+run "$TRIGGER" PreToolUse "$(edit_b b.json)"
+check "multi-repo: a skipped line for widgets doesn't release gadgets" denied
+run "$TRIGGER" PreToolUse "$(tool Edit config.json)"
+check "multi-repo: ...but releases a non-doc edit in widgets" silent
 teardown
 
 

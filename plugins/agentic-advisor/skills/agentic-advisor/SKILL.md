@@ -53,7 +53,7 @@ set -o pipefail   # with curl -f, a failed request fails the whole pipeline inst
 
 Two checks that prevent wasted work — do them before any LinearB call:
 
-- **Not a code task → no grade at all.** If the task will not modify any file (reading or explaining code, answering a question, reviewing a doc, ticket or screenshot, drafting a reply or message in chat), don't grade it: print `> LinearB: <repo> — skipped (not a code task)`, call nothing, and work with your normal care. A grade measures the risk of a code change; a LOW here would wrongly tell you to go light on accuracy. If the task later turns into a file edit, run the sweep then, before the first edit (a hook holds that edit until a real grade exists).
+- **Not a code task → no grade at all.** If the task will not modify any file (reading or explaining code, answering a question, reviewing a doc, ticket or screenshot, drafting a reply or message in chat), don't grade it: print `> LinearB: <repo> — skipped (not a code task)`, call nothing, and work with your normal care. A grade measures the risk of a code change; a LOW here would wrongly tell you to go light on accuracy. If the task later turns into a file edit, run the sweep then, before the first edit.
 - **Trivial code edit → LOW, skip everything.** If the task edits any file but changes **no code behavior** (code comments, doc files, formatting/whitespace, a pure rename), skip signal gathering entirely: effort is **LOW**, add no defensive guards (there's no logic to protect), and don't call LinearB at all — this holds **even on a fragile repo**. Anything that changes behavior is **not** trivial and warrants the sweep below — note that a **constant-value change counts as behavioral** (e.g. a timeout, retry count, or feature-flag default), as does any conditional or logic edit.
 - **Already graded recently → reuse (persistent 24h cache).** The repo-level verdict is daily-stable, so compute it at most **once per repo per ~24h**, not once per task/session — this is the main token/time saver. Cache file, keyed by repo root:
 
@@ -63,14 +63,17 @@ Two checks that prevent wasted work — do them before any LinearB call:
   root="$(git -C "<cwd>" rev-parse --show-toplevel)"; api="${LINEARB_API_URL:-https://public-api.linearb.io}"; api="${api%/}"
   key="$root"; [ "$api" = "https://public-api.linearb.io" ] || key="$root|$api"
   h="$(printf '%s' "$key" | { if command -v shasum >/dev/null 2>&1; then shasum; else sha1sum; fi; } | cut -c1-12)"
-  f="${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor/verdicts/$h.json"   # private per-user dir, not shared /tmp
+  d="${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor/verdicts"   # private per-user dir
+  # Claude Code's sandbox blocks writes to ~/.cache ("operation not permitted"); its $TMPDIR is per user and writable
+  (umask 077; mkdir -p "$d") 2>/dev/null && ( : > "$d/.w.$$" ) 2>/dev/null && rm -f "$d/.w.$$" || d="${TMPDIR:-/tmp}/agentic-advisor-verdicts-$(id -u)"
+  (umask 077; mkdir -p "$d") 2>/dev/null; [ -O "$d" ] || d=""   # a folder someone else made is not safe to write in
+  f="${d:+$d/$h.json}"   # empty: no safe cache folder, so skip the cache this time
   cat "$f" 2>/dev/null   # read BEFORE any LinearB call
   ```
   - **On a hit** (file exists, **is owned by you** — check `[ -O "$f" ]` and ignore it otherwise, since a cache file someone else wrote could fake a LOW grade — AND `computed_at` is within the last 24h — or the file's mtime is <24h old): **skip the repo-health LinearB calls** (repo list, measurements, incidents/search) and reuse `repo_effort`/`repo_evidence` **as the repo-health axis only**. You MUST still grade **task-complexity and change-area (files) fresh for the current task**, then combine — the cache replaces the phase-1 *data*, NOT the final verdict. Note it — **keep the standard verdict shape** so the reporter still captures the decision: `LinearB: <repo> — <Raised|Reduced|Kept> effort (<levels>; repo-health cached <N>h ago; task + files fresh)`. (The ticket lookup under Task Complexity is per task, not repo health, so it still runs on a hit.)
   - **On a miss/stale:** compute the repo-health verdict fresh, then **write the cache atomically** (a per-process temp file then `mv` — atomic on the same filesystem, and the `$$` suffix means two concurrent sessions never share a temp file):
     ```text
-    (umask 077; mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor/verdicts")
-    printf '%s' '{"repo":"<name>","repo_id":<id>,"repo_effort":"<LOW|MEDIUM|HIGH>","repo_evidence":"<real figures>","computed_at":"<ISO-8601 UTC>"}' > "$f.$$.tmp" && mv -f "$f.$$.tmp" "$f"
+    [ -n "$f" ] && printf '%s' '{"repo":"<name>","repo_id":<id>,"repo_effort":"<LOW|MEDIUM|HIGH>","repo_evidence":"<real figures>","computed_at":"<ISO-8601 UTC>"}' > "$f.$$.tmp" && mv -f "$f.$$.tmp" "$f"
     ```
   - **Recompute (ignore cache) if:** it's older than 24h, you just merged/deployed to this repo, or a serious incident may have landed.
   - **⚠️ The cache stores ONLY the repo-health verdict (phase 1: rework / incidents / unreviewed merges) — daily-stable and task-independent. It does NOT store the final combined effort.** Both **change-area (file fix/revert + ownership)** and **task-complexity** are per-task and are **NEVER cached** — recompute them every task and combine `max(cached repo-health, fresh task-complexity, fresh change-area)`. So a **different task on the same repo within 24h** reuses only the cheap repo-health part and still re-grades the task-specific axes → correct effort for the new task. A cached-calm repo can still surface a HIGH task or file finding.
@@ -268,16 +271,16 @@ Phase 2 was only ever deferred because it needs the target file paths. So:
   ```
   This is the reliable path: it's part of the same up-front measurement, not a "remember later" step.
 - **Only if the file cannot be known without exploring** (vague prompt) — emit the repo verdict first, explore to find the files, then before your first `Edit`/`Write` report phase 2. **Which line you print depends on whether phase 2 changes the effort** (recall `effort = max(repo-health, change-area, task)`, so a fix/revert hotspot can raise it above the repo level):
-  - **If phase 2 CHANGES the combined effort** — re-emit the **full verdict line** with the new level, so it stands as the corrected decision (this is the line that gets recorded; without it, telemetry keeps the stale phase-1 level):
-    ```text
-    > LinearB: <repo> — <Raised|Reduced|Kept> effort (<levels>; repo rework X% — but target <file>: ~N lines rewritten/90d) — <what you'll do>.
+  - **If phase 2 CHANGES the combined effort** — re-emit the **full verdict line** with the new level, with the same one `printf` Bash call, so it stands as the corrected decision (this is the line that gets recorded; without it, telemetry keeps the stale phase-1 level):
+    ```bash
+    printf '%s\n' '> LinearB: <repo> — <Raised|Reduced|Kept> effort (<levels>; repo rework X% — but target <file>: ~N lines rewritten/90d) — <what you will do>.'
     ```
-  - **If phase 2 does NOT change the level** — it's pure targeting context; print the short follow-up:
-    ```text
-    > LinearB phase 2 — <file>: ~N lines rewritten/90d — <concentrate guards + tests here | clean, standard care>.
+  - **If phase 2 does NOT change the level** — it's pure targeting context; print the short follow-up with one `printf` Bash call (a hook shows it to the user):
+    ```bash
+    printf '%s\n' '> LinearB phase 2 — <file>: ~N lines rewritten/90d over M commits — <concentrate guards + tests here | clean, standard care>.'
     ```
 
-**HARD RULE either way:** on a phase-2-gated task, the file-level finding must be printed **before the first `Edit`/`Write` to a target file** — combined into the phase-1 verdict when the file is known, or as the follow-up line when it isn't. Measure and report first, edit second. Skip only for trivial edits.
+**HARD RULE either way:** on a phase-2-gated task, the file-level finding must be printed **before the first `Edit`/`Write` to a target file** — combined into the phase-1 verdict when the file is known, or as the follow-up line when it isn't. Measure and report first, edit second. Skip only for trivial edits. When the grade is medium or above and no file was named, a hook holds your edit until the phase-2 line is printed (at most twice per repo and session).
 
 ## Coding Posture
 

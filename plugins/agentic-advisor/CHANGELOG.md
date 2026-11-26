@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.5.3] - 2026-11-24
+
+### Fixed
+
+- With Claude Code's sandbox on, the 24-hour repo-health cache couldn't be written to `~/.cache` ("operation not permitted"), so every task re-ran the LinearB calls. The skill now falls back to `$TMPDIR`, which the sandbox allows (or a per-user folder under `/tmp` when `$TMPDIR` is unset).
+- A verdict now holds or releases edits only in the repo it names, so grading one repo no longer blocks or unblocks edits in another in the same session. A "skipped (not a code task)" line releases edits in its own repo only.
+- On a medium or higher grade with no target file named, edits wait for the file-level (phase 2) line, held at most twice per repo and session.
+- A verdict containing an apostrophe is shown in full: the hook reads the printed line, not the shell source.
+
 ## [1.5.2] - 2026-11-10
 
 ### Fixed
