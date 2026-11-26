@@ -549,6 +549,16 @@ run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
 check "stage2: a low grade is not held for stage 2" silent
 teardown
 setup
+add_skill; add_line "> LinearB: widgets — LOW effort (healthy)."
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "stage2: the old LOW effort shape is not held for stage 2" silent
+teardown
+setup
+add_skill; add_line "> LinearB: widgets — Kept effort (medium; rework 6.5%) — inspect target files first."
+run "$TRIGGER" PreToolUse "$(tool Edit app.js)"
+check "stage2: the word target in the plan is not a file finding" stage2_held
+teardown
+setup
 add_skill; add_line "> LinearB: widgets — Kept effort (medium; rework 6.5%) — focused diff."
 run "$TRIGGER" PreToolUse "$(tool Edit README.md)"
 check "stage2: a docs edit is not held for stage 2" silent

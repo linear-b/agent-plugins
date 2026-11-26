@@ -65,15 +65,15 @@ Two checks that prevent wasted work — do them before any LinearB call:
   h="$(printf '%s' "$key" | { if command -v shasum >/dev/null 2>&1; then shasum; else sha1sum; fi; } | cut -c1-12)"
   d="${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor/verdicts"   # private per-user dir
   # Claude Code's sandbox blocks writes to ~/.cache ("operation not permitted"); its $TMPDIR is per user and writable
-  (umask 077; mkdir -p "$d") 2>/dev/null && ( : > "$d/.w.$$" ) 2>/dev/null && rm -f "$d/.w.$$" || d="${TMPDIR:-/tmp/agentic-advisor-$(id -u)}/agentic-advisor/verdicts"
-  f="$d/$h.json"
+  (umask 077; mkdir -p "$d") 2>/dev/null && ( : > "$d/.w.$$" ) 2>/dev/null && rm -f "$d/.w.$$" || d="${TMPDIR:-/tmp}/agentic-advisor-verdicts-$(id -u)"
+  (umask 077; mkdir -p "$d") 2>/dev/null; [ -O "$d" ] || d=""   # a folder someone else made is not safe to write in
+  f="${d:+$d/$h.json}"   # empty: no safe cache folder, so skip the cache this time
   cat "$f" 2>/dev/null   # read BEFORE any LinearB call
   ```
   - **On a hit** (file exists, **is owned by you** — check `[ -O "$f" ]` and ignore it otherwise, since a cache file someone else wrote could fake a LOW grade — AND `computed_at` is within the last 24h — or the file's mtime is <24h old): **skip the repo-health LinearB calls** (repo list, measurements, incidents/search) and reuse `repo_effort`/`repo_evidence` **as the repo-health axis only**. You MUST still grade **task-complexity and change-area (files) fresh for the current task**, then combine — the cache replaces the phase-1 *data*, NOT the final verdict. Note it — **keep the standard verdict shape** so the reporter still captures the decision: `LinearB: <repo> — <Raised|Reduced|Kept> effort (<levels>; repo-health cached <N>h ago; task + files fresh)`. (The ticket lookup under Task Complexity is per task, not repo health, so it still runs on a hit.)
   - **On a miss/stale:** compute the repo-health verdict fresh, then **write the cache atomically** (a per-process temp file then `mv` — atomic on the same filesystem, and the `$$` suffix means two concurrent sessions never share a temp file):
     ```text
-    (umask 077; mkdir -p "$d")
-    printf '%s' '{"repo":"<name>","repo_id":<id>,"repo_effort":"<LOW|MEDIUM|HIGH>","repo_evidence":"<real figures>","computed_at":"<ISO-8601 UTC>"}' > "$f.$$.tmp" && mv -f "$f.$$.tmp" "$f"
+    [ -n "$f" ] && printf '%s' '{"repo":"<name>","repo_id":<id>,"repo_effort":"<LOW|MEDIUM|HIGH>","repo_evidence":"<real figures>","computed_at":"<ISO-8601 UTC>"}' > "$f.$$.tmp" && mv -f "$f.$$.tmp" "$f"
     ```
   - **Recompute (ignore cache) if:** it's older than 24h, you just merged/deployed to this repo, or a serious incident may have landed.
   - **⚠️ The cache stores ONLY the repo-health verdict (phase 1: rework / incidents / unreviewed merges) — daily-stable and task-independent. It does NOT store the final combined effort.** Both **change-area (file fix/revert + ownership)** and **task-complexity** are per-task and are **NEVER cached** — recompute them every task and combine `max(cached repo-health, fresh task-complexity, fresh change-area)`. So a **different task on the same repo within 24h** reuses only the cheap repo-health part and still re-grades the task-specific axes → correct effort for the new task. A cached-calm repo can still surface a HIGH task or file finding.

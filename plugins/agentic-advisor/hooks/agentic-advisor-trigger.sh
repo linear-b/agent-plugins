@@ -95,7 +95,7 @@ repo_state() {
     | if ($v | length) == 0 then "pending"
       else $v[-1] as $l
         | if ($l.value | test($re) | not) then "skipped"
-          elif ($l.value | test("target ")) or ($l.value | test("(→|->) low[;)]|Kept effort \\(low[;)]")) then "graded"
+          elif ($l.value | test("target [^ ;)]+: ")) or ($l.value | test("(→|->) low[;)]|Kept effort \\(low[;)]| LOW effort")) then "graded"
           else "stage2", ($t[($l.key + 1):][] | select(test("LinearB phase 2 — ")))
           end
       end' "$transcript" 2>/dev/null
