@@ -65,7 +65,7 @@ Two checks that prevent wasted work — do them before any LinearB call:
   h="$(printf '%s' "$key" | { if command -v shasum >/dev/null 2>&1; then shasum; else sha1sum; fi; } | cut -c1-12)"
   d="${XDG_CACHE_HOME:-$HOME/.cache}/agentic-advisor/verdicts"   # private per-user dir
   # Claude Code's sandbox blocks writes to ~/.cache ("operation not permitted"); its $TMPDIR is per user and writable
-  (umask 077; mkdir -p "$d") 2>/dev/null && ( : > "$d/.w.$$" ) 2>/dev/null && rm -f "$d/.w.$$" || d="${TMPDIR:-/tmp}/agentic-advisor/verdicts"
+  (umask 077; mkdir -p "$d") 2>/dev/null && ( : > "$d/.w.$$" ) 2>/dev/null && rm -f "$d/.w.$$" || d="${TMPDIR:-/tmp/agentic-advisor-$(id -u)}/agentic-advisor/verdicts"
   f="$d/$h.json"
   cat "$f" 2>/dev/null   # read BEFORE any LinearB call
   ```
@@ -280,7 +280,7 @@ Phase 2 was only ever deferred because it needs the target file paths. So:
     printf '%s\n' '> LinearB phase 2 — <file>: ~N lines rewritten/90d over M commits — <concentrate guards + tests here | clean, standard care>.'
     ```
 
-**HARD RULE either way:** on a phase-2-gated task, the file-level finding must be printed **before the first `Edit`/`Write` to a target file** — combined into the phase-1 verdict when the file is known, or as the follow-up line when it isn't. Measure and report first, edit second. Skip only for trivial edits. When the grade is medium or above and no file was named, a hook holds your first edit once until the phase-2 line is printed.
+**HARD RULE either way:** on a phase-2-gated task, the file-level finding must be printed **before the first `Edit`/`Write` to a target file** — combined into the phase-1 verdict when the file is known, or as the follow-up line when it isn't. Measure and report first, edit second. Skip only for trivial edits. When the grade is medium or above and no file was named, a hook holds your edit until the phase-2 line is printed (at most twice per repo and session).
 
 ## Coding Posture
 
